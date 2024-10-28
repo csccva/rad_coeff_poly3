@@ -16,9 +16,9 @@ program test_radial
 
   integer :: n_sites, alpha_max, radial_enhancement
   integer, allocatable :: n_neigh(:)
-  real*8 :: rcut_soft_in, rcut_hard_in, atom_sigma_in, atom_sigma_scaling, 
+  real*8 :: rcut_soft_in, rcut_hard_in, atom_sigma_in, atom_sigma_scaling, &
             amplitude_scaling, central_weight, nf = 4.d0
-  real*8, allocatable :: rjs_in(:), W(:,:), S(:,:), exp_coeff(:,:), exp_coeff_der(:,:), 
+  real*8, allocatable :: rjs_in(:), W(:,:), S(:,:), exp_coeff(:,:), exp_coeff_der(:,:),  &
                          exp_coeff_cp(:,:), exp_coeff_der_cp(:,:)
   logical :: do_derivatives, do_central
   logical, allocatable :: mask(:)
