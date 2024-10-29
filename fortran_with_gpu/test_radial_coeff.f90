@@ -70,17 +70,17 @@ program test_radial
 
 
 
-! Using poly3
-  call cpu_time(t1)
-  call get_radial_expansion_coefficients_poly3(n_sites, n_neigh, rjs_in, alpha_max, rcut_soft_in, &
-                                               rcut_hard_in, atom_sigma_in, atom_sigma_scaling, &
-                                               amplitude_scaling, nf, W, scaling_mode, mask, &
-                                               radial_enhancement, do_derivatives, do_central, &
-                                               central_weight, exp_coeff, exp_coeff_der)
-  call cpu_time(t2)
-! Just to make sure the calculation is done with -O3
-!  write(*,*) exp_coeff(1:alpha_max, 1)
-  write(*,*) t2-t1, "seconds for poly3"
+! ! Using poly3
+!   call cpu_time(t1)
+!   call get_radial_expansion_coefficients_poly3(n_sites, n_neigh, rjs_in, alpha_max, rcut_soft_in, &
+!                                                rcut_hard_in, atom_sigma_in, atom_sigma_scaling, &
+!                                                amplitude_scaling, nf, W, scaling_mode, mask, &
+!                                                radial_enhancement, do_derivatives, do_central, &
+!                                                central_weight, exp_coeff, exp_coeff_der)
+!   call cpu_time(t2)
+! ! Just to make sure the calculation is done with -O3
+! !  write(*,*) exp_coeff(1:alpha_max, 1)
+!   write(*,*) t2-t1, "seconds for poly3"
 
 
 ! Using operator 
@@ -100,17 +100,17 @@ program test_radial
 
 
 ! Using any other version of the radial coeff. subroutine
-!  call cpu_time(t1)
-!  call get_radial_expansion_coefficients_poly3operator_fast(n_sites, n_neigh, rjs_in, alpha_max, &
-!                                                       rcut_soft_in, rcut_hard_in, atom_sigma_in, &
-!                                                       atom_sigma_scaling, amplitude_scaling, W, &
-!                                                       scaling_mode, mask, radial_enhancement, &
-!                                                       do_derivatives, do_central, central_weight, &
-!                                                       exp_coeff, exp_coeff_der)
-!  call cpu_time(t2)
+ call cpu_time(t1)
+ call get_radial_expansion_coefficients_poly3operator_gpu(n_sites, n_neigh, rjs_in, alpha_max, &
+                                                      rcut_soft_in, rcut_hard_in, atom_sigma_in, &
+                                                      atom_sigma_scaling, amplitude_scaling, W, &
+                                                      scaling_mode, mask, radial_enhancement, &
+                                                      do_derivatives, do_central, central_weight, &
+                                                      exp_coeff, exp_coeff_der)
+ call cpu_time(t2)
 ! Just to make sure the calculation is done with -O3
-!  write(*,*) exp_coeff(1:alpha_max, 1)
-!  write(*,*) t2-t1, "seconds for operator_fast", sum(abs(exp_coeff_cp-exp_coeff))
+ write(*,*) exp_coeff(1:alpha_max, 1)
+ write(*,*) t2-t1, "seconds for operator_fast", sum(abs(exp_coeff_cp-exp_coeff))
 
 
 end program
