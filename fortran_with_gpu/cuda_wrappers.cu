@@ -2587,4 +2587,10 @@ extern "C" void cpy_htoh_pinned(void *src, void *dest, size_t size ) {
 
 
 
+extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coeff_d, double *exp_coeff_der_d, 
+                     int n_exp_coeff,int n_exp_coeff_der,double rcut_hard_in){
+                    
+
+}
+
 

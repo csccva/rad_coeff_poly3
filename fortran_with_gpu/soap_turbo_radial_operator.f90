@@ -26,6 +26,7 @@
 
 module soap_turbo_radial_op
   use F_B_C
+  use iso_c_binding
 
   contains
 
@@ -710,7 +711,11 @@ integer :: nn, k2
 real*8, save :: elapsed_time = 0.d0
 real*8 :: t1, t2
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
+integer(c_int) :: n_exp_coeff,n_exp_coeff_der
+integer(c_size_t) :: st_size_exp_coeff,st_size_exp_coeff_der
+type(c_ptr) :: exp_coeff_d, exp_coeff_der_d
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+call gpu_set_device(0)
 !   This is for debugging. It prints the basis set to plot it with Gnuplot (gfortran only)
 if( print_basis )then
 print_basis = .false.
@@ -1199,32 +1204,24 @@ else
 deallocate( atom_widths )
 end if
 
-!     Transform from g_alpha to g_n (the orthonormal basis) when using weights
-!     We would need to allocate here again a few things!!!!!!!!!!!!
-!      exp_coeff_soft_array(1:nn, 1:alpha_max) = matmul( exp_coeff_soft_array(1:nn, 1:alpha_max), W )
-!      exp_coeff_buffer_array(1:nn, 1:alpha_max) = matmul( exp_coeff_buffer_array(1:nn, 1:alpha_max), W )
-
-!      do j = 1, nn
-!        k2 = rjs_idx(j)
-!        exp_coeff(1:alpha_max, k2) = amplitudes(j) * soft_weights(j) * exp_coeff_soft_array(j, 1:alpha_max) + &
-!                                     amplitudes(j) * buffer_weights(j) * exp_coeff_buffer_array(j, 1:alpha_max)
-!      end do
-
-
-!     Transform from g_alpha to g_n (the orthonormal basis)
-exp_coeff(1:alpha_max, k+1:k+n_neigh(i)) = matmul( W, exp_coeff(1:alpha_max, k+1:k+n_neigh(i)) )
-if( do_derivatives )then
-exp_coeff_der(1:alpha_max, k+1:k+n_neigh(i)) = matmul( W, exp_coeff_der(1:alpha_max, k+1:k+n_neigh(i)) )
-end if
 
 k = k + n_neigh(i)
 
-!      deallocate( rjs, rjs_idx, atom_sigma_scaleds, s2s, atom_widths, lim_soft_array, soft_weights, &
-!                  buffer_weights, I0_array, g_aux_left_array, g_aux_right_array, M_left_array, M_right_array, &
-!                  I_left_array, I_right_array, exp_coeff_soft_array, amplitudes, amplitudes_der, B, &
-!                  exp_coeff_buffer_array )
+
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 end do
+
+
+k = 0
+do i = 1, n_sites
+  exp_coeff(1:alpha_max, k+1:k+n_neigh(i)) = matmul( W, exp_coeff(1:alpha_max, k+1:k+n_neigh(i)) )
+  if( do_derivatives )then
+    exp_coeff_der(1:alpha_max, k+1:k+n_neigh(i)) = matmul( W, exp_coeff_der(1:alpha_max, k+1:k+n_neigh(i)) )
+  end if
+
+  k = k + n_neigh(i)
+
+enddo
 
 !   **************** New basis ******************
 !   This results from the change of variable in the
@@ -1234,8 +1231,25 @@ end do
 !   the SOAP vectors it does not have an effect anymore.
 exp_coeff = exp_coeff * dsqrt(rcut_hard_in)
 if( do_derivatives )then
-exp_coeff_der = exp_coeff_der / dsqrt(rcut_hard_in)
+  exp_coeff_der = exp_coeff_der / dsqrt(rcut_hard_in)
 end if
+
+n_exp_coeff=alpha_max*size(exp_coeff,2)
+n_exp_coeff_der=alpha_max*size(exp_coeff_der,2)
+st_size_exp_coeff=n_exp_coeff*sizeof(exp_coeff(1,1))
+st_size_exp_coeff_der=n_exp_coeff*sizeof(exp_coeff_der(1,1))
+
+call gpu_malloc_all_blocking(exp_coeff_d,st_size_exp_coeff)
+call gpu_malloc_all_blocking(exp_coeff_der_d,st_size_exp_coeff_der)
+
+call  cpy_htod_blocking(c_loc(exp_coeff),exp_coeff_d,st_size_exp_coeff)
+call  cpy_htod_blocking(c_loc(exp_coeff_der),exp_coeff_der_d,st_size_exp_coeff)
+
+call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, exp_coeff_der_d, &
+                     n_exp_coeff,n_exp_coeff_der,rcut_hard_in )
+
+call  cpy_dtoh_blocking(exp_coeff_d,c_loc(exp_coeff),st_size_exp_coeff)
+call  cpy_dtoh_blocking(exp_coeff_der_d,c_loc(exp_coeff_der),st_size_exp_coeff)
 !   *********************************************
 
 !   This is for debugging

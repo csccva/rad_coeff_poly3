@@ -46,6 +46,6 @@ $(BIN):
 
 # Clean rule
 clean:
-	rm -rf $(BUILD)/*.o $(BUILD)/*.mod $(TARGET)
+	rm -rf $(BUILD)/*.o $(BUILD)/*.mod $(TARGET) *.mod $(BIN) $(BUILD)
 
 .PHONY: all clean

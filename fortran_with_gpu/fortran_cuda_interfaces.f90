@@ -697,156 +697,20 @@ MODULE F_B_C
         integer( c_size_t ), value :: size 
         type(c_ptr), value :: s, d 
       end subroutine cpy_htoh_pinned
-      
-      
-      !
-!      subroutine gpu_2b(n_sparse, n_sites, sp1, sp2, alpha, delta, cutoff, stream, rjs, xyz, n_neigh, species, neighbor_species, do_forces, rcut,buffer, sigma,qs,n_neigh_host) bind(C,name="gpu_2b")
-!        use iso_c_binding
-!        implicit none
-!        type(c_ptr),value :: alpha, cutoff
-!        type(c_ptr) :: stream
-!        integer(c_int),value :: n_sparse, n_sites, sp1, sp2
-!        real(c_double),value :: delta, rcut,buffer,sigma
-!        type(c_ptr),value :: rjs,xyz,n_neigh,species,neighbor_species,qs,n_neigh_host
-!        logical(c_bool), value :: do_forces
-!      end subroutine
-
-
+ 
+      subroutine gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, &
+                exp_coeff_der_d, n_exp_coeff,n_exp_coeff_der,rcut_hard_in )  &
+                bind(C,name="gpu_radial_expansion_coefficients_poly3operator")
+        use iso_c_binding
+        implicit none
+        type(c_ptr), value :: exp_coeff_d, exp_coeff_der_d
+        integer(c_int),value :: n_exp_coeff,n_exp_coeff_der
+        real(c_double),value :: rcut_hard_in
+      end subroutine
 
     END INTERFACE
   END MODULE F_B_C
 
-
-      ! subroutine gpu_malloc_double(a_d,n) bind(C,name="cuda_malloc_double")
-      !   use iso_c_binding
-      !   implicit none
-      !   type(c_ptr) :: a_d
-      !   integer(c_int),value :: n
-      ! end subroutine
-
-
-      ! subroutine one_for_all(soap, kernels, kernels_copy, Qs, energies, &
-      !       delta, zeta, e0, &
-      !       n_sites, n_soap, n_sparse, &
-      !       size_kernels, size_soap, size_Qs, size_alphas, size_energies) &
-      !       bind(C, name="wrappers_all")
-      !   use iso_c_binding
-      !   implicit none
-      !   type(c_ptr), value :: soap, kernels,kernels_copy, Qs, energies
-      !   real(c_double), value :: delta, zeta, e0
-      !   integer(c_int), value :: n_sites, n_soap, n_sparse
-      !   integer(c_int), value :: size_kernels, size_soap, size_Qs, size_alphas, size_energies
-      ! end subroutine
-
-
-
-      ! subroutine gpu_soap_energies_forces_virial(n_neigh_d,n_sites,maxnn, &
-      !                                         Qss_d,n_soap,neighbors_beg_d, &
-      !                                         soap_der_d, &
-      !                                         xyz_d, virial_d, &
-      !                                         neighbors_list_d, n_sites0, forces_d, &
-      !                                         cuhandle, kernels_der_d, Qs_copy_d, &
-      !                                         n_sparse, cdelta_force, &
-      !                                         alphas_d, &
-      !                                         kernels_d, mzetam, size_kernels, &
-      !                                         do_forces, &
-      !                                         energies_d, cdelta_ene, e0,  size_energies, &
-      !                                         Qs_d, size_Qs, &
-      !                                         kernels_copy_d, &
-      !                                         zeta, &
-      !                                         soap_d ) &
-      !             bind(C,name="gpu_soap_energies_forces_virial")
-      !   use iso_c_binding
-      !   type(c_ptr), value :: Qss_d, n_neigh_d,neighbors_beg_d, neighbors_list_d
-      !   type(c_ptr), value :: forces_d, soap_der_d, xyz_d, virial_d
-      !   integer(c_int), value :: n_sites,n_soap,maxnn, n_sites0, size_energies
-      !   type(c_ptr), value :: cuhandle,kernels_der_d, Qs_copy_d, alphas_d, kernels_d
-      !   type(c_ptr), value :: energies_d, Qs_d, kernels_copy_d, soap_d
-      !   integer(c_int),value :: n_sparse, size_kernels, size_Qs
-      !   logical, value:: do_forces
-      !   real(c_double), value :: cdelta_ene, cdelta_force, mzetam, e0, zeta
-      ! end subroutine
-
-
-
-      ! subroutine cpy_double_htod(a,a_d,n) bind(C,name="cuda_cpy_double_htod")
-      !   use iso_c_binding
-      !   implicit none
-      !   type(c_ptr),value :: a_d,a
-      !   integer(c_int),value :: n
-      ! end subroutine
-
-      ! subroutine cpy_double_complex_htod(a,a_d,n) bind(C,name="cuda_cpy_double_complex_htod")
-      !   use iso_c_binding
-      !   implicit none
-      !   type(c_ptr),value :: a_d,a
-      !   integer(c_int),value :: n
-      ! end subroutine
-
-      ! subroutine cpy_int_htod(a,a_d,n) bind(C,name="cuda_cpy_int_htod")
-      !   use iso_c_binding
-      !   implicit none
-      !   type(c_ptr),value :: a_d,a
-      !   integer(c_int),value :: n
-      ! end subroutine
-
-      ! subroutine cpy_bool_htod(a,a_d,n) bind(C,name="cuda_cpy_bool_htod")
-      !   use iso_c_binding
-      !   implicit none
-      !   type(c_ptr),value :: a_d,a
-      !   integer(c_int),value :: n
-      ! end subroutine
-
-      ! subroutine cpy_double_dtod(b_d,a_d,n) bind(C,name="cuda_cpy_double_dtod")
-      !   use iso_c_binding
-      !   implicit none
-      !   type(c_ptr),value :: a_d,b_d
-      !   integer(c_int),value :: n
-      ! end subroutine
-      
-      ! subroutine cpy_bool_dtoh(a_d,a,n) bind(C,name="cuda_cpy_bool_dtoh")
-      !   use iso_c_binding
-      !   implicit none
-      !   type(c_ptr),value :: a_d,a
-      !   integer(c_int),value :: n
-      ! end subroutine
-
-      ! subroutine cpy_double_dtoh(a_d,a,n) bind(C,name="cuda_cpy_double_dtoh")
-      !   use iso_c_binding
-      !   implicit none
-      !   type(c_ptr),value :: a_d,a
-      !   integer(c_int),value :: n
-      ! end subroutine
-
-      ! subroutine cpy_double_complex_dtoh(a_d,a,n) bind(C,name="cuda_cpy_double_complex_dtoh")
-      !   use iso_c_binding
-      !   implicit none
-      !   type(c_ptr),value :: a_d,a
-      !   integer(c_int),value :: n
-      ! end subroutine
-
-
-
-      ! subroutine gpu_malloc_double_complex(a_d,n) bind(C,name="cuda_malloc_double_complex")
-      !   use iso_c_binding
-      !   implicit none
-      !     type(c_ptr) :: a_d
-      !     integer(c_int),value :: n
-      ! end subroutine
-
-      ! subroutine gpu_malloc_int(a_d,n) bind(C,name="cuda_malloc_int")
-      !   use iso_c_binding
-      !   implicit none
-      !     type(c_ptr) :: a_d
-      !     integer(c_int),value :: n
-      ! end subroutine
-
-      ! subroutine gpu_malloc_bool(a_d,n) bind(C,name="cuda_malloc_bool")
-      !   use iso_c_binding
-      !   implicit none
-      !     type(c_ptr) :: a_d
-      !     integer(c_int),value :: n
-      ! end subroutine
 
 module gpu_var_mod
 
