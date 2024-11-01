@@ -714,8 +714,17 @@ real*8 :: t1, t2
 integer(c_int) :: n_exp_coeff,n_exp_coeff_der
 integer(c_size_t) :: st_size_exp_coeff,st_size_exp_coeff_der
 type(c_ptr) :: exp_coeff_d, exp_coeff_der_d
+type(c_ptr) :: W_d
+logical(c_bool) :: c_do_derivatives
+type(c_ptr) :: cublas_handle, gpu_stream
+integer :: rank
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-call gpu_set_device(0)
+rank=0
+call gpu_set_device(rank)
+call create_cublas_handle(cublas_handle, gpu_stream)
+c_do_derivatives=do_derivatives
+
+
 !   This is for debugging. It prints the basis set to plot it with Gnuplot (gfortran only)
 if( print_basis )then
 print_basis = .false.
@@ -1229,27 +1238,41 @@ enddo
 !   know the actual value of the expansion coefficients.
 !   Since this is a global factor, once we have normalized
 !   the SOAP vectors it does not have an effect anymore.
-exp_coeff = exp_coeff * dsqrt(rcut_hard_in)
-if( do_derivatives )then
-  exp_coeff_der = exp_coeff_der / dsqrt(rcut_hard_in)
-end if
 
+
+! exp_coeff = exp_coeff * dsqrt(rcut_hard_in)
+! if( do_derivatives )then
+!   exp_coeff_der = exp_coeff_der / dsqrt(rcut_hard_in)
+! end if
+
+st_W=alpha_max*alpha_max
+call gpu_malloc_all(W_d,st_d, gpu_stream)
+call cpy_htod(c_loc(W), W_d, st_d, gpu_stream)
 n_exp_coeff=alpha_max*size(exp_coeff,2)
 n_exp_coeff_der=alpha_max*size(exp_coeff_der,2)
 st_size_exp_coeff=n_exp_coeff*sizeof(exp_coeff(1,1))
 st_size_exp_coeff_der=n_exp_coeff*sizeof(exp_coeff_der(1,1))
 
-call gpu_malloc_all_blocking(exp_coeff_d,st_size_exp_coeff)
-call gpu_malloc_all_blocking(exp_coeff_der_d,st_size_exp_coeff_der)
+call gpu_malloc_all(exp_coeff_d,st_size_exp_coeff, gpu_stream)
+call gpu_malloc_all(exp_coeff_der_d,st_size_exp_coeff_der, gpu_stream)
 
-call  cpy_htod_blocking(c_loc(exp_coeff),exp_coeff_d,st_size_exp_coeff)
-call  cpy_htod_blocking(c_loc(exp_coeff_der),exp_coeff_der_d,st_size_exp_coeff)
+call  cpy_htod(c_loc(exp_coeff),exp_coeff_d,st_size_exp_coeff, gpu_stream)
+call  cpy_htod(c_loc(exp_coeff_der),exp_coeff_der_d,st_size_exp_coeff,gpu_stream)
 
 call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, exp_coeff_der_d, &
-                     n_exp_coeff,n_exp_coeff_der,rcut_hard_in )
+                     n_exp_coeff,n_exp_coeff_der,rcut_hard_in, W_d, &
+                     c_do_derivatives, &
+                     gpu_stream )
 
-call  cpy_dtoh_blocking(exp_coeff_d,c_loc(exp_coeff),st_size_exp_coeff)
-call  cpy_dtoh_blocking(exp_coeff_der_d,c_loc(exp_coeff_der),st_size_exp_coeff)
+call  cpy_dtoh(exp_coeff_d,c_loc(exp_coeff),st_size_exp_coeff,gpu_stream)
+call  cpy_dtoh(exp_coeff_der_d,c_loc(exp_coeff_der),st_size_exp_coeff,gpu_stream)
+
+call gpu_free_async(exp_coeff_d, gpu_stream)
+call gpu_free_async(exp_coeff_der_d, gpu_stream)
+
+call gpu_stream_synchronize(gpu_stream) ! call gpu_device_synchronize()
+call destroy_cublas_handle(cublas_handle, gpu_stream)
+call gpu_device_reset()
 !   *********************************************
 
 !   This is for debugging

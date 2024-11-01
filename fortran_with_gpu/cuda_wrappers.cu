@@ -314,10 +314,6 @@ extern "C" void create_cublas_handle(hipblasHandle_t *handle,hipStream_t *stream
  	  hipblasCreate(handle);
     hipStreamCreate(stream);
     hipblasSetStream(*handle, *stream);
-//    hipsolverCreate(handle);
-//    hipsolverSetStream(*handle,*stream);
-    /*printf("\n cublas handle created \n");
-    exit(0);*/
 
    return;
 }
@@ -2586,11 +2582,53 @@ extern "C" void cpy_htoh_pinned(void *src, void *dest, size_t size ) {
 }
 
 
+extern "C" void gpu_stream_synchronize(hipStream_t *stream){
+  gpuErrchk(hipStreamSynchronize(stream[0]));
+}
+
+extern "C" void gpu_device_synchronize(){
+  gpuErrchk( hipDeviceSynchronize() );
+}
+
+
+__global__
+void global_scaling_operator(double *exp_coeff_d, 
+                     double rcut_hard_in, int n_exp_coeff, int divide){
+                      
+  int i_ij=threadIdx.x+blockIdx.x*blockDim.x;
+  if(i_ij<n_exp_coeff){
+    double loc_rad_exp_coeff=exp_coeff_d[i_ij];
+    if(divide==0){
+      loc_rad_exp_coeff*=sqrt(rcut_hard_in);
+    }
+    if(divide==1){
+      loc_rad_exp_coeff*=1.0/sqrt(rcut_hard_in);
+    }
+    exp_coeff_d[i_ij]=loc_rad_exp_coeff; //radial_exp_coeff_d[i_ij+i_one*size_radial_exp_coeff_two]=loc_rad_exp_coeff;
+  }
+}
+
+
+
 
 extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coeff_d, double *exp_coeff_der_d, 
-                     int n_exp_coeff,int n_exp_coeff_der,double rcut_hard_in){
+                     int n_exp_coeff,int n_exp_coeff_der, bool c_do_derivatives, double rcut_hard_in, 
+                     double *W_D, 
+                     hipStream_t *stream){
                     
+  dim3 nblocks=dim3((n_exp_coeff-1+tpb)/tpb,1,1);
+  dim3 nthreads=dim3(tpb,1,1); 
+  int divide;
+  divide=0;
+  global_scaling_operator<<<nblocks, nthreads,0,stream[0]>>>(exp_coeff_d, rcut_hard_in, 
+                                          n_exp_coeff, divide);  
 
+  if(c_do_derivatives){
+  dim3 nblocks=dim3((n_exp_coeff_der-1+tpb)/tpb,1,1);
+    divide=1;
+    global_scaling_operator<<< nblocks, nthreads,0,stream[0] >>>(exp_coeff_der_d, rcut_hard_in, 
+                                          n_exp_coeff_der, divide);   
+  }
 }
 
 
