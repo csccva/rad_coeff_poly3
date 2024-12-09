@@ -712,9 +712,10 @@ real*8, save :: elapsed_time = 0.d0
 real*8 :: t1, t2
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 integer(c_int) :: n_exp_coeff,n_exp_coeff_der
-integer(c_size_t) :: st_size_exp_coeff,st_size_exp_coeff_der
+integer(c_size_t) :: st_size_exp_coeff,st_size_exp_coeff_der,st_W,st_k_i, st_n_neigh
+integer(c_int), allocatable :: k_i(:)
 type(c_ptr) :: exp_coeff_d, exp_coeff_der_d
-type(c_ptr) :: W_d
+type(c_ptr) :: W_d,k_i_d, n_neigh_d
 logical(c_bool) :: c_do_derivatives
 type(c_ptr) :: cublas_handle, gpu_stream
 integer :: rank
@@ -1221,33 +1222,44 @@ k = k + n_neigh(i)
 end do
 
 
+
+k = 0
+! do i = 1, n_sites
+  !exp_coeff(1:alpha_max, k+1:k+n_neigh(i)) = matmul( W, exp_coeff(1:alpha_max, k+1:k+n_neigh(i)) )
+  ! if( do_derivatives )then
+  !   exp_coeff_der(1:alpha_max, k+1:k+n_neigh(i)) = matmul( W, exp_coeff_der(1:alpha_max, k+1:k+n_neigh(i)) )
+  ! end if
+
+  ! k = k + n_neigh(i)
+
+! enddo
+
+
+
+
+allocate(k_i(1:n_sites))
+k_i=0
 k = 0
 do i = 1, n_sites
-  exp_coeff(1:alpha_max, k+1:k+n_neigh(i)) = matmul( W, exp_coeff(1:alpha_max, k+1:k+n_neigh(i)) )
-  if( do_derivatives )then
-    exp_coeff_der(1:alpha_max, k+1:k+n_neigh(i)) = matmul( W, exp_coeff_der(1:alpha_max, k+1:k+n_neigh(i)) )
-  end if
+  k_i(i)=k
 
   k = k + n_neigh(i)
 
 enddo
 
-!   **************** New basis ******************
-!   This results from the change of variable in the
-!   overlap integrals. We only need this if we want to
-!   know the actual value of the expansion coefficients.
-!   Since this is a global factor, once we have normalized
-!   the SOAP vectors it does not have an effect anymore.
+st_n_neigh=n_sites*c_int
+st_k_i=n_sites*c_int
 
+call gpu_malloc_all(n_neigh_d,st_n_neigh, gpu_stream)
+call cpy_htod(c_loc(n_neigh), n_neigh_d, st_n_neigh, gpu_stream)
 
-! exp_coeff = exp_coeff * dsqrt(rcut_hard_in)
-! if( do_derivatives )then
-!   exp_coeff_der = exp_coeff_der / dsqrt(rcut_hard_in)
-! end if
+call gpu_malloc_all(k_i_d,st_k_i, gpu_stream)
+call cpy_htod(c_loc(k_i), k_i_d, st_k_i, gpu_stream)
 
-st_W=alpha_max*alpha_max
-call gpu_malloc_all(W_d,st_d, gpu_stream)
-call cpy_htod(c_loc(W), W_d, st_d, gpu_stream)
+st_W=alpha_max*alpha_max*c_double
+call gpu_malloc_all(W_d,st_W, gpu_stream)
+call cpy_htod(c_loc(W), W_d, st_W, gpu_stream)
+
 n_exp_coeff=alpha_max*size(exp_coeff,2)
 n_exp_coeff_der=alpha_max*size(exp_coeff_der,2)
 st_size_exp_coeff=n_exp_coeff*sizeof(exp_coeff(1,1))
@@ -1260,7 +1272,8 @@ call  cpy_htod(c_loc(exp_coeff),exp_coeff_d,st_size_exp_coeff, gpu_stream)
 call  cpy_htod(c_loc(exp_coeff_der),exp_coeff_der_d,st_size_exp_coeff,gpu_stream)
 
 call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, exp_coeff_der_d, &
-                     n_exp_coeff,n_exp_coeff_der,rcut_hard_in, W_d, &
+                     n_exp_coeff,n_exp_coeff_der,rcut_hard_in, &
+                     W_d, k_i_d, alpha_max,n_sites, n_neigh_d,&
                      c_do_derivatives, &
                      gpu_stream )
 

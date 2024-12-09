@@ -2608,16 +2608,51 @@ void global_scaling_operator(double *exp_coeff_d,
   }
 }
 
+__global__
+void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int *k_i, int *n_neigh_d, 
+                  int alpha_max, int n_sites)
+{
+
+  int i_site=threadIdx.x+blockIdx.x*blockDim.x; 
+  if(i_site<n_sites)
+  {
+    int my_k=k_i[i_site];
+    int my_nn=n_neigh_d[i_site];
+    for(int i_n=0; i_n<alpha_max; i_n++){
+      for(int i_d=0;i_d<my_nn;i_d++){
+        double matmul_We=0.0;
+        for(int i_k=0;i_k<alpha_max;i_k++){
+          //matmul_We+=W_d[i_n+i_k*alpha_max]*exp_coeff_d[i_k+(i_d+my_k)*alpha_max];
+          matmul_We+=W_d[i_n+i_k*alpha_max]*exp_coeff_d[i_k+(i_d+my_k)*alpha_max];
+        }
+        tmp_exp_coeff_d[i_n+(i_d+my_k)*alpha_max]=matmul_We;
+      }
+    }
+
+  }
+}
 
 
 
 extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coeff_d, double *exp_coeff_der_d, 
-                     int n_exp_coeff,int n_exp_coeff_der, bool c_do_derivatives, double rcut_hard_in, 
-                     double *W_D, 
+                     int n_exp_coeff,int n_exp_coeff_der,double rcut_hard_in, 
+                     double *W_d, int *k_i_d, int alpha_max, int n_sites, int *n_neigh_d,
+                     bool c_do_derivatives, 
                      hipStream_t *stream){
                     
-  dim3 nblocks=dim3((n_exp_coeff-1+tpb)/tpb,1,1);
+  dim3 nblocks=dim3((n_sites-1+tpb)/tpb,1,1);
   dim3 nthreads=dim3(tpb,1,1); 
+  double *tmp_exp_coeff_d;
+  gpuErrchk(hipMallocAsync((void**)&tmp_exp_coeff_d,sizeof(double)*n_exp_coeff,stream[0]));
+
+  exp_w_matmul<<<nblocks,nthreads>>>(exp_coeff_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
+  gpuErrchk(hipMemcpyAsync(exp_coeff_d, tmp_exp_coeff_d, n_exp_coeff*sizeof(double), hipMemcpyDeviceToDevice,stream[0] ));
+/*   if(c_do_derivatives){
+    gpuErrchk(hipMemcpyAsync(exp_coeff_der_d, tmp_exp_coeff_d, n_exp_coeff_der*sizeof(double), hipMemcpyDeviceToDevice,stream[0] ));
+  } */
+
+  gpuErrchk(hipFreeAsync(tmp_exp_coeff_d,   stream[0]));
+  nblocks=dim3((n_exp_coeff-1+tpb)/tpb,1,1);
   int divide;
   divide=0;
   global_scaling_operator<<<nblocks, nthreads,0,stream[0]>>>(exp_coeff_d, rcut_hard_in, 

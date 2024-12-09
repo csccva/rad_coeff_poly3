@@ -112,6 +112,9 @@ program test_radial
  write(*,*) exp_coeff(1:alpha_max, 1)
  write(*,*) t2-t1, "seconds for operator_gpu"
  write(*,*) "Difference between cpu and gpu", sum(abs(exp_coeff_cp-exp_coeff))
+ write(*,*) "Difference between cpu and gpu", maxval(abs(exp_coeff_cp-exp_coeff))
+ write(*,*) "Difference between cpu and gpu", sum(abs(exp_coeff_der_cp-exp_coeff_der))
+ write(*,*) "Difference between cpu and gpu", maxval(abs(exp_coeff_der_cp-exp_coeff_der))
 
 
 end program
