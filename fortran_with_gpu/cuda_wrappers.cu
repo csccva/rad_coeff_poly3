@@ -2618,14 +2618,14 @@ void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int
   {
     int my_k=k_i[i_site];
     int my_nn=n_neigh_d[i_site];
-    for(int i_n=0; i_n<alpha_max; i_n++){
-      for(int i_d=0;i_d<my_nn;i_d++){
+    for(int i_m=0; i_m<alpha_max; i_m++){
+      for(int i_j=0;i_j<my_nn;i_j++){
         double matmul_We=0.0;
         for(int i_k=0;i_k<alpha_max;i_k++){
           //matmul_We+=W_d[i_n+i_k*alpha_max]*exp_coeff_d[i_k+(i_d+my_k)*alpha_max];
-          matmul_We+=W_d[i_n+i_k*alpha_max]*exp_coeff_d[i_k+(i_d+my_k)*alpha_max];
+          matmul_We+=W_d[i_m+i_k*alpha_max]*exp_coeff_d[i_k+(i_j+my_k)*alpha_max];
         }
-        tmp_exp_coeff_d[i_n+(i_d+my_k)*alpha_max]=matmul_We;
+        tmp_exp_coeff_d[i_m+(i_j+my_k)*alpha_max]=matmul_We;
       }
     }
 
@@ -2633,6 +2633,17 @@ void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int
 }
 
 
+__global__ 
+void buffer_kernel(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int *k_i, int *n_neigh_d, 
+                  int alpha_max, int n_sites) {
+
+  int i_site=threadIdx.x+blockIdx.x*blockDim.x; 
+  if(i_site<n_sites)
+  {
+    int my_k=k_i[i_site];
+    int my_nn=n_neigh_d[i_site];
+  }
+ }
 
 extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coeff_d, double *exp_coeff_der_d, 
                      int n_exp_coeff,int n_exp_coeff_der,double rcut_hard_in, 
@@ -2647,9 +2658,10 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
 
   exp_w_matmul<<<nblocks,nthreads>>>(exp_coeff_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
   gpuErrchk(hipMemcpyAsync(exp_coeff_d, tmp_exp_coeff_d, n_exp_coeff*sizeof(double), hipMemcpyDeviceToDevice,stream[0] ));
-/*   if(c_do_derivatives){
+   if(c_do_derivatives){
+    exp_w_matmul<<<nblocks,nthreads>>>(exp_coeff_der_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
     gpuErrchk(hipMemcpyAsync(exp_coeff_der_d, tmp_exp_coeff_d, n_exp_coeff_der*sizeof(double), hipMemcpyDeviceToDevice,stream[0] ));
-  } */
+  } 
 
   gpuErrchk(hipFreeAsync(tmp_exp_coeff_d,   stream[0]));
   nblocks=dim3((n_exp_coeff-1+tpb)/tpb,1,1);
