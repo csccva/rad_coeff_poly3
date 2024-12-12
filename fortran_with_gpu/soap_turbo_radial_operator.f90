@@ -712,19 +712,29 @@ integer :: nn, k2
 real*8, save :: elapsed_time = 0.d0
 real*8 :: t1, t2
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-integer(c_int) :: n_exp_coeff,n_exp_coeff_der
+integer(c_int) :: n_exp_coeff,n_exp_coeff_der, n_rjs_in
 integer(c_size_t) :: st_size_exp_coeff,st_size_exp_coeff_der,st_W,st_k_i, st_n_neigh
+integer(c_size_t) :: st_mask,st_rjs_in
 integer(c_int), allocatable :: k_i(:)
 type(c_ptr) :: exp_coeff_d, exp_coeff_der_d
-type(c_ptr) :: W_d,k_i_d, n_neigh_d
+type(c_ptr) :: W_d,k_i_d, n_neigh_d, rjs_in_d
 logical(c_bool) :: c_do_derivatives
-type(c_ptr) :: cublas_handle, gpu_stream
+type(c_ptr) :: cublas_handle, gpu_stream, mask_d
+logical(c_bool), allocatable, target :: new_mask(:)
 integer :: rank
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 rank=0
 call gpu_set_device(rank)
 call create_cublas_handle(cublas_handle, gpu_stream)
 c_do_derivatives=do_derivatives
+
+allocate(new_mask(1:n_sites*n_neigh(1)) )
+new_mask= logical( .false., kind=c_bool ) !.false.
+do i=1,n_sites*n_neigh(1)
+  if(mask(i)) then
+    new_mask(i)= logical( .true., kind=c_bool ) !.true.
+  endif
+enddo
 
 
 !   This is for debugging. It prints the basis set to plot it with Gnuplot (gfortran only)
@@ -1011,9 +1021,9 @@ do i = 1, n_sites
 
   !     count number of atoms within buffer region
   nn = count( rcut_soft_in < rcut_hard_in .and. mask(k+1:k+n_neigh(i)) .and. &
-              rjs_in(k+1:k+n_neigh(i)) + atom_widths > rcut_soft_in )
+              rjs_in(k+1:k+n_neigh(i)) + atom_widths(1:n_neigh(i)) > rcut_soft_in )
 
-   !write(*,*) "Buffer Region", i, nn
+  write(*,*) "Buffer Region", i, nn
 
   if( nn > 0 )then
     !       These need to be allocated immediately
@@ -1235,6 +1245,15 @@ do i = 1, n_sites
 end do
 
 ! stop
+n_rjs_in=size(rjs_in,1)
+st_rjs_in=n_rjs_in*sizeof(rjs_in(1))
+call gpu_malloc_all(rjs_in_d, st_rjs_in, gpu_stream)
+call cpy_htod(c_loc(rjs_in), rjs_in_d, st_rjs_in, gpu_stream)
+!stop
+
+st_mask= size(mask,1)*sizeof(new_mask(1))
+call gpu_malloc_all(mask_d, st_mask, gpu_stream)
+call cpy_htod(c_loc(new_mask), mask_d, st_mask, gpu_stream)
 
 allocate(k_i(1:n_sites))
 k_i=0

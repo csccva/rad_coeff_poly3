@@ -2635,50 +2635,71 @@ void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int
 #define WARP_SIZE 64 // 32 for cuda!!!!!!
 
  __global__ 
- void cuda_buffer_region(const float* rjs_in, const bool* mask, const float rcut_soft_in, 
-                         const float atom_widths, const int* n_neigh, int k, int i, int* nn_out, 
-                         const int warp_size) {
-                          
-  int idx = threadIdx.x;  // Global thread ID
-  int tid = threadIdx.x;                            // Thread ID within block, same as lane in this case
-  int n_neighbors = n_neigh[i];                      // Number of neighbors
-  int start_idx = k + 1;                             // Start index for this iteration
-  // Local thread contribution
-  int local_nn = 0;
-  
-  // Ensure we only process valid indices
-  if (idx >= start_idx && idx < start_idx + n_neighbors) {
-    bool condition = (mask[idx] && (rjs_in[idx] + atom_widths > rcut_soft_in));
-    local_nn = condition ? 1 : 0;
-  }
-  
-  // Warp-level reduction using ballot and popc (CUDA equivalent)
-  // unsigned int mask_ballot = __ballot_sync(0xFFFFFFFF, local_nn > 0);
-  // int warp_nn = __popc(mask_ballot);  // Count the number of 1s in the ballot
-  
-  // HIP equivalent for __ballot and __popc
-  unsigned int mask_ballot = __ballot(local_nn > 0);
-  int warp_nn = __popc(mask_ballot);  // Count the number of 1s in the ballot
-  
-  // Reduce within the warp using shuffle operations (CUDA equivalent)
-  // for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
-  //     warp_nn += __shfl_down_sync(0xFFFFFFFF, warp_nn, offset);
-  // }
-  
-  // HIP equivalent for shuffle operations
-  for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
-    warp_nn += __shfl_down(warp_nn, offset);  // HIP equivalent to __shfl_down_sync
-  }
-  // Broadcast the computed warp_nn to all threads in the warp (CUDA equivalent)
-  // int broadcasted_nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0);  // Broadcast to all threads from lane 0
+ void cuda_buffer_region(const double* rjs_in, const bool* mask, const double rcut_soft_in, 
+                           const double rcut_hard_in, const double atom_sigma_in, 
+                           const double atom_sigma_scaling, const int* n_neigh, 
+                           int *k_i, int warp_size, int* nn_out) {
+  int tid = threadIdx.x;  // Thread ID within block (same as lane in this case)
+  int i=blockIdx.x;
+  int k=k_i[i];
+  int start_idx = k + 1;  // Start index for neighbors
+  int n_neighbors = n_neigh[i];  // Number of neighbors to process
 
-  // HIP equivalent for __shfl
-  int broadcasted_nn = __shfl(warp_nn, 0);  // Broadcast to all threads from lane 0
+  // Initialize local count for this thread
+  int local_nn = 0;
+
+    // Constants for atom_widths computation
+    const double factor = 2.0 * sqrt(2.0 * log(2.0));
+
+  // Iterate through neighbors assigned to this thread
+  for (int offset = tid; offset < n_neighbors; offset += warp_size) {
+    int idx = start_idx + offset;
+
+    // Compute atom_widths for the current neighbor
+        double atom_widths = factor * (atom_sigma_in + atom_sigma_scaling * rjs_in[idx]);
+
+    // Evaluate the conditions
+    bool condition = (rcut_soft_in < rcut_hard_in) &&
+                         mask[idx] &&
+                         (rjs_in[idx] + atom_widths> rcut_soft_in);
+
+    // Increment local count if condition is true
+    if (condition) {
+      local_nn++;
+    }
+  }
+
+  // Perform warp-level reduction to sum local_nn across the warp
+    // HIP: Use __ballot and __popc
+    // CUDA Equivalent:
+    // unsigned int mask_ballot = __ballot_sync(0xFFFFFFFF, local_nn > 0);
+  unsigned int mask_ballot = __ballot(local_nn > 0);
+
+  // HIP: Use __popc to count set bits
+    // CUDA Equivalent:
+    // int warp_nn = __popc(mask_ballot);
+  int warp_nn = __popc(mask_ballot);
   
-  // Store the broadcasted value in shared memory or use it for further computation
-  // In this case, we'll directly accumulate it into the global counter
-  if (tid == 0) {  // Only the first thread in the warp (tid == 0) updates the global counter
-  atomicAdd(nn_out, broadcasted_nn); // Atomic update to global counter
+  // Perform warp-level reduction using __shfl_down
+    // HIP: Use __shfl_down
+    // CUDA Equivalent:
+    // for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
+    //     warp_nn += __shfl_down_sync(0xFFFFFFFF, warp_nn, offset);
+    // }
+  for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
+    warp_nn += __shfl_down(warp_nn, offset);
+  }
+
+  
+    // Broadcast the computed warp_nn to all threads in the warp
+    // HIP: Use __shfl
+    // CUDA Equivalent:
+    // int broadcasted_nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0);
+    int broadcasted_nn = __shfl(warp_nn, 0);
+
+  // Store the final count (only thread 0 writes to the global nn_out)
+  if (tid == 0) {
+    atomicAdd(nn_out, broadcasted_nn);
   }
   printf("Site:%d nn %d\n", (int)blockIdx.x, broadcasted_nn);
 }
