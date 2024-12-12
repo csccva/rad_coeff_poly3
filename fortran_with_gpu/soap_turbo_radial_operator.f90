@@ -1289,11 +1289,13 @@ call gpu_malloc_all(exp_coeff_der_d,st_size_exp_coeff_der, gpu_stream)
 call  cpy_htod(c_loc(exp_coeff),exp_coeff_d,st_size_exp_coeff, gpu_stream)
 call  cpy_htod(c_loc(exp_coeff_der),exp_coeff_der_d,st_size_exp_coeff,gpu_stream)
 
-call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, exp_coeff_der_d, &
-                     n_exp_coeff,n_exp_coeff_der,rcut_hard_in, &
-                     W_d, k_i_d, alpha_max,n_sites, n_neigh_d,&
-                     c_do_derivatives, &
-                     gpu_stream )
+call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, &
+                exp_coeff_der_d, n_exp_coeff,n_exp_coeff_der,rcut_hard_in,rcut_soft_in, &
+                W_d, k_i_d, alpha_max, n_sites, n_neigh_d, &
+                c_do_derivatives, &
+                atom_sigma_scaling, atom_sigma_in, &
+                rjs_in_d, mask_d, &
+                gpu_stream) 
 
 call  cpy_dtoh(exp_coeff_d,c_loc(exp_coeff),st_size_exp_coeff,gpu_stream)
 call  cpy_dtoh(exp_coeff_der_d,c_loc(exp_coeff_der),st_size_exp_coeff,gpu_stream)

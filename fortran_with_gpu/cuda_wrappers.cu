@@ -2636,9 +2636,9 @@ void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int
 
  __global__ 
  void cuda_buffer_region(const double* rjs_in, const bool* mask, const double rcut_soft_in, 
-                           const double rcut_hard_in, const double atom_sigma_in, 
-                           const double atom_sigma_scaling, const int* n_neigh, 
-                           int *k_i, int warp_size, int* nn_out) {
+                         const double rcut_hard_in, const double atom_sigma_in, 
+                         const double atom_sigma_scaling, const int* n_neigh, 
+                         int *k_i, int warp_size) {
   int tid = threadIdx.x;  // Thread ID within block (same as lane in this case)
   int i=blockIdx.x;
   int k=k_i[i];
@@ -2698,21 +2698,29 @@ void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int
     int broadcasted_nn = __shfl(warp_nn, 0);
 
   // Store the final count (only thread 0 writes to the global nn_out)
-  if (tid == 0) {
-    atomicAdd(nn_out, broadcasted_nn);
+  // if (tid == 0) {
+  //   atomicAdd(nn_out, broadcasted_nn);
+  // }
+  if(tid==0){
+    printf("Site:%d thread %d nn %d broadcasted nn %d\n", (int)blockIdx.x, tid, warp_nn, broadcasted_nn);
   }
-  printf("Site:%d nn %d\n", (int)blockIdx.x, broadcasted_nn);
 }
 
 extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coeff_d, double *exp_coeff_der_d, 
-                     int n_exp_coeff,int n_exp_coeff_der,double rcut_hard_in, 
+                     int n_exp_coeff,int n_exp_coeff_der,double rcut_hard_in, double rcut_soft_in, 
                      double *W_d, int *k_i_d, int alpha_max, int n_sites, int *n_neigh_d,
                      bool c_do_derivatives, 
+                     double atom_sigma_scaling, double atom_sigma_in, 
+                     double *rjs_in_d, bool* mask_d, 
                      hipStream_t *stream){
                     
   int warp_size;
   hipDeviceGetAttribute(&warp_size, hipDeviceAttributeWarpSize, 0);
   printf("Warp size: %d\n", warp_size);
+  cuda_buffer_region<<<n_sites, warp_size>>>(rjs_in_d,mask_d,rcut_soft_in, 
+                                            rcut_hard_in, atom_sigma_in, 
+                                            atom_sigma_scaling, n_neigh_d, 
+                                            k_i_d, warp_size);
   
   dim3 nblocks=dim3((n_sites-1+tpb)/tpb,1,1);
   dim3 nthreads=dim3(tpb,1,1); 
@@ -2721,7 +2729,7 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
 
   exp_w_matmul<<<nblocks,nthreads>>>(exp_coeff_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
   gpuErrchk(hipMemcpyAsync(exp_coeff_d, tmp_exp_coeff_d, n_exp_coeff*sizeof(double), hipMemcpyDeviceToDevice,stream[0] ));
-   if(c_do_derivatives){
+  if(c_do_derivatives){
     exp_w_matmul<<<nblocks,nthreads>>>(exp_coeff_der_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
     gpuErrchk(hipMemcpyAsync(exp_coeff_der_d, tmp_exp_coeff_d, n_exp_coeff_der*sizeof(double), hipMemcpyDeviceToDevice,stream[0] ));
   } 

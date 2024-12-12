@@ -710,20 +710,24 @@ MODULE F_B_C
       end subroutine
  
       subroutine gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, &
-                exp_coeff_der_d, n_exp_coeff,n_exp_coeff_der,rcut_hard_in, &
+                exp_coeff_der_d, n_exp_coeff,n_exp_coeff_der,rcut_hard_in,rcut_soft_in, &
                 W_d, k_i_d, alpha_max, n_sites, n_neigh_d, &
                 c_do_derivatives, &
+                atom_sigma_scaling, atom_sigma_in, &
+                rjs_in_d, mask_d, &
                 stream)  &
                 bind(C,name="gpu_radial_expansion_coefficients_poly3operator")
         use iso_c_binding
         implicit none
         type(c_ptr), value :: exp_coeff_d, exp_coeff_der_d
         type(c_ptr), value :: W_d, k_i_d,n_neigh_d
+        type(c_ptr), value :: rjs_in_d, mask_d
         type(c_ptr) :: stream
         logical(c_bool), value :: c_do_derivatives
         integer(c_int),value :: n_exp_coeff,n_exp_coeff_der
         integer(c_int),value :: n_sites, alpha_max
-        real(c_double),value :: rcut_hard_in
+        real(c_double),value :: rcut_hard_in,rcut_soft_in
+        real(c_double),value :: atom_sigma_scaling, atom_sigma_in
       end subroutine
 
     END INTERFACE
