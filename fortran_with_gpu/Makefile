@@ -1,12 +1,12 @@
 # Compiler
 FC = ftn
-FCFLAGS = -fPIC -O3 -h flex_mp=intolerant
+FCFLAGS = -fPIC -O3 -h flex_mp=intolerant #-O0 #-O3 -h flex_mp=intolerant
 HIPCC = CC
 HIPFLAGS = -xhip -munsafe-fp-atomics --offload-arch=gfx90a -O3
 
 # ROCm libraries
 ROCM_LIB = $(ROCM_PATH)/lib
-ROCM_LFLAGS = -L$(ROCM_LIB) -lamdhip64 -lhiprand -lhipblas -lsci_cray
+ROCM_LFLAGS = -L$(ROCM_LIB) -lamdhip64 -lhiprand -lhipblas # -lsci_cray
 
 # Directories
 SRC = .

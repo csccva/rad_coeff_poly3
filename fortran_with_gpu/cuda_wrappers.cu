@@ -2632,18 +2632,56 @@ void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int
   }
 }
 
+#define WARP_SIZE 64 // 32 for cuda!!!!!!
 
-__global__ 
-void buffer_kernel(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int *k_i, int *n_neigh_d, 
-                  int alpha_max, int n_sites) {
-
-  int i_site=threadIdx.x+blockIdx.x*blockDim.x; 
-  if(i_site<n_sites)
-  {
-    int my_k=k_i[i_site];
-    int my_nn=n_neigh_d[i_site];
+ __global__ 
+ void cuda_buffer_region(const float* rjs_in, const bool* mask, const float rcut_soft_in, 
+                         const float atom_widths, const int* n_neigh, int k, int i, int* nn_out, 
+                         const int warp_size) {
+                          
+  int idx = threadIdx.x;  // Global thread ID
+  int tid = threadIdx.x;                            // Thread ID within block, same as lane in this case
+  int n_neighbors = n_neigh[i];                      // Number of neighbors
+  int start_idx = k + 1;                             // Start index for this iteration
+  // Local thread contribution
+  int local_nn = 0;
+  
+  // Ensure we only process valid indices
+  if (idx >= start_idx && idx < start_idx + n_neighbors) {
+    bool condition = (mask[idx] && (rjs_in[idx] + atom_widths > rcut_soft_in));
+    local_nn = condition ? 1 : 0;
   }
- }
+  
+  // Warp-level reduction using ballot and popc (CUDA equivalent)
+  // unsigned int mask_ballot = __ballot_sync(0xFFFFFFFF, local_nn > 0);
+  // int warp_nn = __popc(mask_ballot);  // Count the number of 1s in the ballot
+  
+  // HIP equivalent for __ballot and __popc
+  unsigned int mask_ballot = __ballot(local_nn > 0);
+  int warp_nn = __popc(mask_ballot);  // Count the number of 1s in the ballot
+  
+  // Reduce within the warp using shuffle operations (CUDA equivalent)
+  // for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
+  //     warp_nn += __shfl_down_sync(0xFFFFFFFF, warp_nn, offset);
+  // }
+  
+  // HIP equivalent for shuffle operations
+  for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
+    warp_nn += __shfl_down(warp_nn, offset);  // HIP equivalent to __shfl_down_sync
+  }
+  // Broadcast the computed warp_nn to all threads in the warp (CUDA equivalent)
+  // int broadcasted_nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0);  // Broadcast to all threads from lane 0
+
+  // HIP equivalent for __shfl
+  int broadcasted_nn = __shfl(warp_nn, 0);  // Broadcast to all threads from lane 0
+  
+  // Store the broadcasted value in shared memory or use it for further computation
+  // In this case, we'll directly accumulate it into the global counter
+  if (tid == 0) {  // Only the first thread in the warp (tid == 0) updates the global counter
+  atomicAdd(nn_out, broadcasted_nn); // Atomic update to global counter
+  }
+  printf("Site:%d nn %d\n", (int)blockIdx.x, broadcasted_nn);
+}
 
 extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coeff_d, double *exp_coeff_der_d, 
                      int n_exp_coeff,int n_exp_coeff_der,double rcut_hard_in, 
@@ -2651,6 +2689,10 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                      bool c_do_derivatives, 
                      hipStream_t *stream){
                     
+  int warp_size;
+  hipDeviceGetAttribute(&warp_size, hipDeviceAttributeWarpSize, 0);
+  printf("Warp size: %d\n", warp_size);
+  
   dim3 nblocks=dim3((n_sites-1+tpb)/tpb,1,1);
   dim3 nthreads=dim3(tpb,1,1); 
   double *tmp_exp_coeff_d;

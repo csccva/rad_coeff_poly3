@@ -111,10 +111,25 @@ program test_radial
 ! Just to make sure the calculation is done with -O3
  write(*,*) exp_coeff(1:alpha_max, 1)
  write(*,*) t2-t1, "seconds for operator_gpu"
- write(*,*) "Difference between cpu and gpu", sum(abs(exp_coeff_cp-exp_coeff))
- write(*,*) "Difference between cpu and gpu", maxval(abs(exp_coeff_cp-exp_coeff))
- write(*,*) "Difference between cpu and gpu", sum(abs(exp_coeff_der_cp-exp_coeff_der))
- write(*,*) "Difference between cpu and gpu", maxval(abs(exp_coeff_der_cp-exp_coeff_der))
+ write(*,*) "Tot Difference between cpu and gpu",    sum(abs(exp_coeff_cp-exp_coeff))
+ write(*,*) "Max Difference between cpu and gpu", maxval(abs(exp_coeff_cp-exp_coeff)), maxval(abs(exp_coeff_cp-exp_coeff)/abs(exp_coeff) )
+ write(*,*) "Min Difference between cpu and gpu", minval(abs(exp_coeff_cp-exp_coeff))
+ write(*,*) "Tot Difference between cpu and gpu",    sum(abs(exp_coeff_der_cp-exp_coeff_der))
+ write(*,*) "Max Difference between cpu and gpu", maxval(abs(exp_coeff_der_cp-exp_coeff_der))
+ write(*,*) "Min Difference between cpu and gpu", minval(abs(exp_coeff_der_cp-exp_coeff_der))
 
+!  write(*,*) sqrt(sum(abs(exp_coeff_cp-exp_coeff)*abs(exp_coeff_cp-exp_coeff)/(alpha_max*n_sites*n_neigh(1))))
+! write(*,*) maxval(n_neigh )
+! k=0
+! do j=1,n_sites
+!   write(*,*) abs(exp_coeff_cp(1:alpha_max,k+1:k+n_neigh(i))-exp_coeff(1:alpha_max,k+1:k+n_neigh(i)))
+!   k=k+n_neigh(i)
+! enddo
+
+! do i=1,alpha_max
+!   do j=1,alpha_max
+!     write(*,*) i,j, W(i,j)
+!   enddo
+! enddo
 
 end program
