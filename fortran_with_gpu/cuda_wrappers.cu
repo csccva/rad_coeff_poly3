@@ -2633,34 +2633,42 @@ void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int
 }
 
 #define WARP_SIZE 64 // 32 for cuda!!!!!!
+__device__ int warp_red_int(int data) {
+
+   int res = data;
+   for (int i =WARP_SIZE/2; i!=0; i=i>>1) {
+     //      res += __shfl_down_sync(0xffffffff,res, i,warpSize); // in cuda is a little diffferent
+      res += __shfl_down(res, i,WARP_SIZE);      
+   }
+   return res;
+}
 
  __global__ 
  void cuda_buffer_region(const double* rjs_in, const bool* mask, const double rcut_soft_in, 
                          const double rcut_hard_in, const double atom_sigma_in, 
                          const double atom_sigma_scaling, const int* n_neigh, 
-                         int *k_i, int warp_size) {
+                         int *k_i) {
   int tid = threadIdx.x;  // Thread ID within block (same as lane in this case)
   int i=blockIdx.x;
   int k=k_i[i];
-  int start_idx = k + 1;  // Start index for neighbors
   int n_neighbors = n_neigh[i];  // Number of neighbors to process
 
   // Initialize local count for this thread
   int local_nn = 0;
 
-    // Constants for atom_widths computation
-    const double factor = 2.0 * sqrt(2.0 * log(2.0));
+  // Constants for atom_widths computation
+  const double factor = 2.0 * sqrt(2.0 * log(2.0));
+
 
   // Iterate through neighbors assigned to this thread
-  for (int offset = tid; offset < n_neighbors; offset += warp_size) {
-    int idx = start_idx + offset;
+  for (int j = tid; j < n_neighbors; j += WARP_SIZE) {
+    int idx = k +j;
 
     // Compute atom_widths for the current neighbor
-        double atom_widths = factor * (atom_sigma_in + atom_sigma_scaling * rjs_in[idx]);
+    double atom_widths = factor * (atom_sigma_in + atom_sigma_scaling * rjs_in[idx]);
 
     // Evaluate the conditions
-    bool condition = (rcut_soft_in < rcut_hard_in) &&
-                         mask[idx] &&
+    bool condition = (rcut_soft_in < rcut_hard_in) && mask[idx] &&
                          (rjs_in[idx] + atom_widths> rcut_soft_in);
 
     // Increment local count if condition is true
@@ -2669,41 +2677,21 @@ void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int
     }
   }
 
-  // Perform warp-level reduction to sum local_nn across the warp
-    // HIP: Use __ballot and __popc
-    // CUDA Equivalent:
-    // unsigned int mask_ballot = __ballot_sync(0xFFFFFFFF, local_nn > 0);
-  unsigned int mask_ballot = __ballot(local_nn > 0);
-
-  // HIP: Use __popc to count set bits
-    // CUDA Equivalent:
-    // int warp_nn = __popc(mask_ballot);
-  int warp_nn = __popc(mask_ballot);
-  
-  // Perform warp-level reduction using __shfl_down
-    // HIP: Use __shfl_down
-    // CUDA Equivalent:
-    // for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
-    //     warp_nn += __shfl_down_sync(0xFFFFFFFF, warp_nn, offset);
-    // }
-  for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
-    warp_nn += __shfl_down(warp_nn, offset);
-  }
-
-  
+  int warp_nn= warp_red_int(local_nn);
     // Broadcast the computed warp_nn to all threads in the warp
     // HIP: Use __shfl
     // CUDA Equivalent:
     // int broadcasted_nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0);
     int broadcasted_nn = __shfl(warp_nn, 0);
 
-  // Store the final count (only thread 0 writes to the global nn_out)
-  // if (tid == 0) {
-  //   atomicAdd(nn_out, broadcasted_nn);
+
+  // if(tid==0 && (int)blockIdx.x==15){
+  //   printf("Site %d thread %d nn %d broadcasted nn %d\n", (int)blockIdx.x +1, tid, warp_nn, broadcasted_nn);
   // }
-  if(tid==0){
-    printf("Site:%d thread %d nn %d broadcasted nn %d\n", (int)blockIdx.x, tid, warp_nn, broadcasted_nn);
-  }
+  // if(tid==5 && (int)blockIdx.x==15){
+  //   printf("Site %d thread %d nn %d broadcasted nn %d\n", (int)blockIdx.x +1, tid, warp_nn, broadcasted_nn);
+  // }
+
 }
 
 extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coeff_d, double *exp_coeff_der_d, 
@@ -2716,11 +2704,15 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                     
   int warp_size;
   hipDeviceGetAttribute(&warp_size, hipDeviceAttributeWarpSize, 0);
-  printf("Warp size: %d\n", warp_size);
+  if(warp_size!=WARP_SIZE){
+    printf("\n \nWrong value in WARP_SIZE!!!\n\n");
+    exit(1); 
+  }
+  //printf("Warp size: %d\n", warp_size);
   cuda_buffer_region<<<n_sites, warp_size>>>(rjs_in_d,mask_d,rcut_soft_in, 
                                             rcut_hard_in, atom_sigma_in, 
                                             atom_sigma_scaling, n_neigh_d, 
-                                            k_i_d, warp_size);
+                                            k_i_d);
   
   dim3 nblocks=dim3((n_sites-1+tpb)/tpb,1,1);
   dim3 nthreads=dim3(tpb,1,1); 

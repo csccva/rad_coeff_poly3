@@ -688,7 +688,7 @@ real*8 :: pi, rj, s2, atom_width, atom_width_scaling, filter_width, x
 real*8, allocatable :: A(:,:)
 real*8 :: W(:,:)
 !   derivatives
-real*8 :: amplitude_der
+real*8 :: amplitude_der, tmp_aw
 !   Results will be stored in exp_coeff, which is an array of dimension (alpha_max, n_atom_pairs)
 real*8 :: exp_coeff(:,:), exp_coeff_der(:,:)
 logical, save :: print_basis = .false.
@@ -1022,8 +1022,17 @@ do i = 1, n_sites
   !     count number of atoms within buffer region
   nn = count( rcut_soft_in < rcut_hard_in .and. mask(k+1:k+n_neigh(i)) .and. &
               rjs_in(k+1:k+n_neigh(i)) + atom_widths(1:n_neigh(i)) > rcut_soft_in )
+  ! nn=0
+  ! do j=1,n_neigh(1)
+  !   tmp_aw=2.d0*sqrt(2.d0*log(2.d0))*(atom_sigma_in + atom_sigma_scaling*rjs_in(k+j))
+  !   if( rcut_soft_in < rcut_hard_in .and. mask(k+j) .and. &
+  !       rjs_in(k+j) + tmp_aw > rcut_soft_in) then
+  !     nn=nn+1
+  !   endif
+  ! enddo
 
-  write(*,*) "Buffer Region", i, nn
+  !write(*,*) "Buffer_Region_site ", i, " nn is ", nn !, count( rcut_soft_in < rcut_hard_in .and. mask(k+1:k+n_neigh(i)) .and. &
+  ! rjs_in(k+1:k+n_neigh(i)) + atom_widths(1:n_neigh(i)) > rcut_soft_in )
 
   if( nn > 0 )then
     !       These need to be allocated immediately
