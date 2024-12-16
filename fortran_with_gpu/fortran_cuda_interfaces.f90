@@ -715,6 +715,8 @@ MODULE F_B_C
                 c_do_derivatives, &
                 atom_sigma_scaling, atom_sigma_in, &
                 rjs_in_d, mask_d, &
+                num_scaling_mode , amplitude_scaling, central_weight, &
+                radial_enhancement, c_do_central,&
                 stream)  &
                 bind(C,name="gpu_radial_expansion_coefficients_poly3operator")
         use iso_c_binding
@@ -723,10 +725,12 @@ MODULE F_B_C
         type(c_ptr), value :: W_d, k_i_d,n_neigh_d
         type(c_ptr), value :: rjs_in_d, mask_d
         type(c_ptr) :: stream
-        logical(c_bool), value :: c_do_derivatives
+        logical(c_bool), value :: c_do_derivatives, c_do_central
+        integer(c_int) :: radial_enhancement
         integer(c_int),value :: n_exp_coeff,n_exp_coeff_der
-        integer(c_int),value :: n_sites, alpha_max
-        real(c_double),value :: rcut_hard_in,rcut_soft_in
+        integer(c_int),value :: n_sites, alpha_max, num_scaling_mode
+        real(c_double),value :: rcut_hard_in,rcut_soft_in, amplitude_scaling
+        real(c_double),value ::  central_weight
         real(c_double),value :: atom_sigma_scaling, atom_sigma_in
       end subroutine
 

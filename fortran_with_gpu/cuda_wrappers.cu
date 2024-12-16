@@ -2633,6 +2633,7 @@ void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int
 }
 
 #define WARP_SIZE 64 // 32 for cuda!!!!!!
+#define LOCAL_NN 2
 __device__ int warp_red_int(int data) {
 
    int res = data;
@@ -2646,19 +2647,23 @@ __device__ int warp_red_int(int data) {
  __global__ 
  void cuda_buffer_region(const double* rjs_in, const bool* mask, const double rcut_soft_in, 
                          const double rcut_hard_in, const double atom_sigma_in, 
-                         const double atom_sigma_scaling, const int* n_neigh, 
-                         int *k_i) {
+                         const double atom_sigma_scaling, double atom_sigma, const int* n_neigh, 
+                         int *k_i, int alpha_max, 
+                         int scaling_mode, double amplitude_scaling, 
+                         double central_weight,  bool do_central,
+                         double rcut_soft, double rcut_hard,
+                         int radial_enhancement) {
   int tid = threadIdx.x;  // Thread ID within block (same as lane in this case)
   int i=blockIdx.x;
   int k=k_i[i];
   int n_neighbors = n_neigh[i];  // Number of neighbors to process
+  double pi=acos(-1.0);
 
   // Initialize local count for this thread
   int local_nn = 0;
 
   // Constants for atom_widths computation
   const double factor = 2.0 * sqrt(2.0 * log(2.0));
-
 
   // Iterate through neighbors assigned to this thread
   for (int j = tid; j < n_neighbors; j += WARP_SIZE) {
@@ -2675,6 +2680,7 @@ __device__ int warp_red_int(int data) {
     if (condition) {
       local_nn++;
     }
+
   }
 
   int warp_nn= warp_red_int(local_nn);
@@ -2682,8 +2688,11 @@ __device__ int warp_red_int(int data) {
     // HIP: Use __shfl
     // CUDA Equivalent:
     // int broadcasted_nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0);
-    int broadcasted_nn = __shfl(warp_nn, 0);
-
+    int nn = __shfl(warp_nn, 0);
+    
+    if(nn>2*WARP_SIZE){
+      printf(" \n Alert!!!! Alert!!! \n nn is bigger than 2 times the warp increase LOCAL_NN! \n");
+    }
 
   // if(tid==0 && (int)blockIdx.x==15){
   //   printf("Site %d thread %d nn %d broadcasted nn %d\n", (int)blockIdx.x +1, tid, warp_nn, broadcasted_nn);
@@ -2691,15 +2700,131 @@ __device__ int warp_red_int(int data) {
   // if(tid==5 && (int)blockIdx.x==15){
   //   printf("Site %d thread %d nn %d broadcasted nn %d\n", (int)blockIdx.x +1, tid, warp_nn, broadcasted_nn);
   // }
+  
+  double local_rjs[LOCAL_NN]; //[local_nn];
+  int  local_rjs_idx[LOCAL_NN];//[local_nn]; //[LOCAL_NN];
+  // double local_rjs[(WARP_SIZE+nn-1)/WARP_SIZE];
+  // int  local_idx[(WARP_SIZE+nn-1)/WARP_SIZE];
+  int k2=0;
+  
 
+  // Iterate through neighbors assigned to this thread
+  for (int j = tid; j < n_neighbors; j += WARP_SIZE) {
+    int idx = k +j;
+
+    // Compute atom_widths for the current neighbor
+    double atom_widths = factor * (atom_sigma_in + atom_sigma_scaling * rjs_in[idx]);
+
+    // Evaluate the conditions
+    bool condition = (rcut_soft_in < rcut_hard_in) && mask[idx] &&
+                         (rjs_in[idx] + atom_widths> rcut_soft_in);
+
+    // Increment local count if condition is true
+    if (condition) {
+      local_rjs[k2]= rjs_in[k+j]/rcut_hard_in;
+      local_rjs_idx[k2] = k+j;
+      k2++;
+    }
+  }
+  double atom_sigma_scaleds[LOCAL_NN];//[local_nn]
+  double  s2s[LOCAL_NN];//[local_nn]
+  double atom_widths[LOCAL_NN];//[local_nn];
+  double lim_buffer_array[3][LOCAL_NN];//[local_nn]; 
+  double I0_array[3][(7>alpha_max+4)?7:alpha_max+4][LOCAL_NN];//[local_nn]; 
+  double g_aux_left_array[2][alpha_max][LOCAL_NN];//[local_nn];
+  double g_aux_right_arra[2][alpha_max][LOCAL_NN];//[local_nn];
+  double M_left_array[2][alpha_max][LOCAL_NN];//[local_nn];
+  double M_right_array[2][alpha_max][LOCAL_NN];//[local_nn];
+  double I_left_array[alpha_max][LOCAL_NN];//[local_nn];
+  double I_right_array[alpha_max][LOCAL_NN];//[local_nn];
+  double exp_coeff_buffer_array[alpha_max][LOCAL_NN];//[local_nn];
+  double amplitudes[LOCAL_NN];//s[local_nn];
+  double amplitudes_der[LOCAL_NN];//[local_nn];
+  double B[LOCAL_NN][7];//[local_nn][7];
+
+  // if(c_do_derivatives){
+
+  // }
+  double local_atom_width_scaling = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaling;
+  for(int il=0;il<local_nn;il++){
+    atom_sigma_scaleds[il]=atom_sigma+atom_sigma_scaling*local_rjs[il];
+    s2s[il]=atom_sigma_scaleds[il]*atom_sigma_scaleds[il];
+    atom_widths[il] = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaleds[il];
+  }
+  double atom_width_scaling = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaling;
+  if( scaling_mode == 1000 ){
+    if( amplitude_scaling == 0.0 ){
+      for(int il=0;il<local_nn;il++){
+        amplitudes[il] = 1.0 / atom_sigma_scaleds[il];
+        amplitudes_der[il] = - atom_sigma_scaling / s2s[il];
+      }
+    }
+    else{
+      if( amplitude_scaling == 1.0 ) {
+        for(int il=0;il<local_nn;il++){
+          amplitudes[il] = 1.0 / atom_sigma_scaleds[il] * ( 1.0 + 2.0*local_rjs[il]*local_rjs[il]*local_rjs[il] - 3.0*local_rjs[il]*local_rjs[il] );
+          amplitudes_der[il] = 6.0 / atom_sigma_scaleds[il] * (local_rjs[il]*local_rjs[il] - local_rjs[il]) 
+                          - atom_sigma_scaling / atom_sigma_scaleds[il] * amplitudes[il];
+        }
+      }
+      else{
+        for(int il=0;il<local_nn;il++){
+          amplitudes[il] = pow((1.0 / atom_sigma_scaleds[il] * ( 1.0 + 2.0*local_rjs[il]*local_rjs[il]*local_rjs[il] - 3.0*local_rjs[il]*local_rjs[il] )),amplitude_scaling);
+          amplitudes_der[il] =pow( (6.0*amplitude_scaling / atom_sigma_scaleds[il] * (local_rjs[il]*local_rjs[il] - local_rjs[il]) 
+                       * ( 1.0 + 2.0*local_rjs[il]*local_rjs[il]*local_rjs[il] - 3.0*local_rjs[il]*local_rjs[il] )),(amplitude_scaling - 1.0))
+                       - atom_sigma_scaling / atom_sigma_scaleds[il] * amplitudes[il];
+        }
+      }
+    }
+  }
+  if(nn>0){
+    if(tid==0){
+      amplitudes[0]=central_weight*amplitudes[0];
+      amplitudes_der[0]=central_weight*amplitudes_der[0];
+    }
+  }
+  if( radial_enhancement == 1 ){
+    for(int il=0;il<local_nn;il++){
+      amplitudes_der[il] = amplitudes[il] * ( 1.0 + sqrt(2.0/pi)*atom_sigma_scaling ) + 
+                       amplitudes_der[il] * ( local_rjs[il] + sqrt(2.0/pi)*atom_sigma_scaleds[il] );
+       amplitudes[il] = amplitudes[il] * ( local_rjs[il] + sqrt(2.0/pi)*atom_sigma_scaleds[il] );
+    }
+  }
+  else if( radial_enhancement == 2 ){
+    for(int il=0;il<local_nn;il++){
+      amplitudes_der[il] = amplitudes[il]*( 2.0*local_rjs[il] + 2.0*atom_sigma_scaleds[il]*atom_sigma_scaling + 
+                       sqrt(8.0/pi)*atom_sigma_scaleds[il] + sqrt(8.0/pi)*local_rjs[il]*atom_sigma_scaling ) + 
+                       amplitudes_der[il]*( local_rjs[il]*local_rjs[il] + s2s[il] + sqrt(8.0/pi)*atom_sigma_scaleds[il]*local_rjs[il] );
+      amplitudes[il] = amplitudes[il] * ( local_rjs[il]*local_rjs[il]+ s2s[il] + sqrt(8.0/pi)*atom_sigma_scaleds[il]*local_rjs[il] );
+    }
+  }
+  if( !do_central ){ 
+    if( nn > 0 && tid==0 ){
+      if( local_rjs_idx[0] == k ){
+        amplitudes[0] = 0.0;
+      }
+    }
+  }  
+  //  !       Atoms within the buffer region
+  //   lim_buffer_array(:, 1) = max( rcut_soft, rjs - atom_widths ) ! lower limit left
+  //   lim_buffer_array(:, 2) = max( rjs, rcut_soft )               ! upper limit left / lower limit right
+  //   lim_buffer_array(:, 3) = min( rcut_hard, rjs + atom_widths ) ! upper limit right
+
+    for(int il=0;il<local_nn;il++){
+      lim_buffer_array[0,il] = (rcut_soft>local_rjs[il]-atom_widths[il])?rcut_soft:local_rjs[il]-atom_widths[il]; // lower limit left
+      lim_buffer_array[1,il] = (local_rjs[il]>rcut_soft)?local_rjs[il]:rcut_soft; //upper limit left / lower limit right
+      lim_buffer_array[2,il] = (rcut_hard>local_rjs[il]+atom_widths[il])?rcut_hard:local_rjs[il]+atom_widths[il]; //upper limit left / lower limit right
+    }
 }
 
 extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coeff_d, double *exp_coeff_der_d, 
                      int n_exp_coeff,int n_exp_coeff_der,double rcut_hard_in, double rcut_soft_in, 
                      double *W_d, int *k_i_d, int alpha_max, int n_sites, int *n_neigh_d,
                      bool c_do_derivatives, 
-                     double atom_sigma_scaling, double atom_sigma_in, 
+                     double atom_sigma_scaling, double atom_sigma_in,  double atom_sigma,
                      double *rjs_in_d, bool* mask_d, 
+                     int scaling_mode, double amplitude_scaling, double central_weight,
+                     int radial_enhancement, bool do_central,
                      hipStream_t *stream){
                     
   int warp_size;
@@ -2711,8 +2836,9 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
   //printf("Warp size: %d\n", warp_size);
   cuda_buffer_region<<<n_sites, warp_size>>>(rjs_in_d,mask_d,rcut_soft_in, 
                                             rcut_hard_in, atom_sigma_in, 
-                                            atom_sigma_scaling, n_neigh_d, 
-                                            k_i_d);
+                                            atom_sigma_scaling, atom_sigma,n_neigh_d, 
+                                            k_i_d,alpha_max, scaling_mode, amplitude_scaling, 
+                                            central_weight, radial_enhancement, do_central);
   
   dim3 nblocks=dim3((n_sites-1+tpb)/tpb,1,1);
   dim3 nthreads=dim3(tpb,1,1); 

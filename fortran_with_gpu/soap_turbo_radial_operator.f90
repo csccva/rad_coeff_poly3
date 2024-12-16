@@ -70,7 +70,7 @@ module soap_turbo_radial_op
 
     implicit none
 
-    integer, intent(in) :: alpha_max, n_neigh(:), n_sites, radial_enhancement
+    integer(c_int), intent(in) :: alpha_max, n_neigh(:), n_sites, radial_enhancement
     real*8, intent(in) :: rcut_soft_in, rcut_hard_in, rjs_in(:), atom_sigma_in, atom_sigma_scaling
     real*8, intent(in) :: amplitude_scaling, central_weight
     real*8 :: rcut_soft, rcut_hard, atom_sigma, atom_sigma_scaled, amplitude
@@ -678,7 +678,7 @@ implicit none
 
 integer, intent(in) :: alpha_max, n_neigh(:), n_sites, radial_enhancement
 real*8, intent(in) :: rcut_soft_in, rcut_hard_in, rjs_in(:), atom_sigma_in, atom_sigma_scaling
-real*8, intent(in) :: amplitude_scaling, central_weight
+real(c_double), intent(in) :: amplitude_scaling, central_weight
 real*8 :: rcut_soft, rcut_hard, atom_sigma, atom_sigma_scaled, amplitude
 logical, intent(in) :: mask(:), do_derivatives, do_central
 character(*), intent(in) :: scaling_mode
@@ -716,17 +716,20 @@ integer(c_int) :: n_exp_coeff,n_exp_coeff_der, n_rjs_in
 integer(c_size_t) :: st_size_exp_coeff,st_size_exp_coeff_der,st_W,st_k_i, st_n_neigh
 integer(c_size_t) :: st_mask,st_rjs_in
 integer(c_int), allocatable :: k_i(:)
+integer(c_int) :: num_scaling_mode
 type(c_ptr) :: exp_coeff_d, exp_coeff_der_d
 type(c_ptr) :: W_d,k_i_d, n_neigh_d, rjs_in_d
-logical(c_bool) :: c_do_derivatives
+logical(c_bool) :: c_do_derivatives,c_do_central
 type(c_ptr) :: cublas_handle, gpu_stream, mask_d
 logical(c_bool), allocatable, target :: new_mask(:)
 integer :: rank
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 rank=0
+num_scaling_mode=-100000
 call gpu_set_device(rank)
 call create_cublas_handle(cublas_handle, gpu_stream)
 c_do_derivatives=do_derivatives
+c_do_central=do_central
 
 allocate(new_mask(1:n_sites*n_neigh(1)) )
 new_mask= logical( .false., kind=c_bool ) !.false.
@@ -1254,6 +1257,9 @@ do i = 1, n_sites
 end do
 
 ! stop
+if( scaling_mode == "polynomial" )then
+  num_scaling_mode=1000
+endif
 n_rjs_in=size(rjs_in,1)
 st_rjs_in=n_rjs_in*sizeof(rjs_in(1))
 call gpu_malloc_all(rjs_in_d, st_rjs_in, gpu_stream)
@@ -1304,6 +1310,8 @@ call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, &
                 c_do_derivatives, &
                 atom_sigma_scaling, atom_sigma_in, &
                 rjs_in_d, mask_d, &
+                num_scaling_mode, amplitude_scaling, central_weight, &
+                radial_enhancement, c_do_central,  &
                 gpu_stream) 
 
 call  cpy_dtoh(exp_coeff_d,c_loc(exp_coeff),st_size_exp_coeff,gpu_stream)
