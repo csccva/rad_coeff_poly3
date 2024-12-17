@@ -1308,10 +1308,10 @@ call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, &
                 exp_coeff_der_d, n_exp_coeff,n_exp_coeff_der,rcut_hard_in,rcut_soft_in, &
                 W_d, k_i_d, alpha_max, n_sites, n_neigh_d, &
                 c_do_derivatives, &
-                atom_sigma_scaling, atom_sigma_in, &
+                atom_sigma_scaling, atom_sigma_in, atom_sigma, &
                 rjs_in_d, mask_d, &
                 num_scaling_mode, amplitude_scaling, central_weight, &
-                radial_enhancement, c_do_central,  &
+                radial_enhancement, c_do_central, rcut_soft, rcut_hard, &
                 gpu_stream) 
 
 call  cpy_dtoh(exp_coeff_d,c_loc(exp_coeff),st_size_exp_coeff,gpu_stream)

@@ -2811,9 +2811,9 @@ __device__ int warp_red_int(int data) {
   //   lim_buffer_array(:, 3) = min( rcut_hard, rjs + atom_widths ) ! upper limit right
 
     for(int il=0;il<local_nn;il++){
-      lim_buffer_array[0,il] = (rcut_soft>local_rjs[il]-atom_widths[il])?rcut_soft:local_rjs[il]-atom_widths[il]; // lower limit left
-      lim_buffer_array[1,il] = (local_rjs[il]>rcut_soft)?local_rjs[il]:rcut_soft; //upper limit left / lower limit right
-      lim_buffer_array[2,il] = (rcut_hard>local_rjs[il]+atom_widths[il])?rcut_hard:local_rjs[il]+atom_widths[il]; //upper limit left / lower limit right
+      lim_buffer_array[0][il] = (rcut_soft>local_rjs[il]-atom_widths[il])?rcut_soft:local_rjs[il]-atom_widths[il]; // lower limit left
+      lim_buffer_array[1][il] = (local_rjs[il]>rcut_soft)?local_rjs[il]:rcut_soft; //upper limit left / lower limit right
+      lim_buffer_array[2][il] = (rcut_hard>local_rjs[il]+atom_widths[il])?rcut_hard:local_rjs[il]+atom_widths[il]; 
     }
 }
 
@@ -2824,7 +2824,7 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                      double atom_sigma_scaling, double atom_sigma_in,  double atom_sigma,
                      double *rjs_in_d, bool* mask_d, 
                      int scaling_mode, double amplitude_scaling, double central_weight,
-                     int radial_enhancement, bool do_central,
+                     int radial_enhancement, bool do_central, double rcut_soft, double rcut_hard,
                      hipStream_t *stream){
                     
   int warp_size;
@@ -2838,7 +2838,9 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                                             rcut_hard_in, atom_sigma_in, 
                                             atom_sigma_scaling, atom_sigma,n_neigh_d, 
                                             k_i_d,alpha_max, scaling_mode, amplitude_scaling, 
-                                            central_weight, radial_enhancement, do_central);
+                                            central_weight, do_central, 
+                                            rcut_soft, rcut_hard,
+                                            radial_enhancement);
   
   dim3 nblocks=dim3((n_sites-1+tpb)/tpb,1,1);
   dim3 nthreads=dim3(tpb,1,1); 

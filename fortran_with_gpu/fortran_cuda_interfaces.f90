@@ -713,10 +713,10 @@ MODULE F_B_C
                 exp_coeff_der_d, n_exp_coeff,n_exp_coeff_der,rcut_hard_in,rcut_soft_in, &
                 W_d, k_i_d, alpha_max, n_sites, n_neigh_d, &
                 c_do_derivatives, &
-                atom_sigma_scaling, atom_sigma_in, &
+                atom_sigma_scaling, atom_sigma_in, atom_sigma, &
                 rjs_in_d, mask_d, &
                 num_scaling_mode , amplitude_scaling, central_weight, &
-                radial_enhancement, c_do_central,&
+                radial_enhancement, c_do_central, rcut_soft, rcut_hard, &
                 stream)  &
                 bind(C,name="gpu_radial_expansion_coefficients_poly3operator")
         use iso_c_binding
@@ -729,9 +729,10 @@ MODULE F_B_C
         integer(c_int) :: radial_enhancement
         integer(c_int),value :: n_exp_coeff,n_exp_coeff_der
         integer(c_int),value :: n_sites, alpha_max, num_scaling_mode
+        real(c_double),value :: rcut_hard,rcut_soft
         real(c_double),value :: rcut_hard_in,rcut_soft_in, amplitude_scaling
         real(c_double),value ::  central_weight
-        real(c_double),value :: atom_sigma_scaling, atom_sigma_in
+        real(c_double),value :: atom_sigma_scaling, atom_sigma_in, atom_sigma
       end subroutine
 
     END INTERFACE
