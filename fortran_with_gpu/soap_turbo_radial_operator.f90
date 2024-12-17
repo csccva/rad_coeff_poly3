@@ -504,7 +504,7 @@ module soap_turbo_radial_op
         lim_buffer_array(:, 1) = max( rcut_soft, rjs - atom_widths ) ! lower limit left
         lim_buffer_array(:, 2) = max( rjs, rcut_soft )               ! upper limit left / lower limit right
         lim_buffer_array(:, 3) = min( rcut_hard, rjs + atom_widths ) ! upper limit right
-
+        !write(*,*) "CPU ", lim_buffer_array(1, 1), lim_buffer_array(1, 2), lim_buffer_array(1, 3), i
         I0_array = M_radial_poly_array(lim_buffer_array, max(7, alpha_max + 4), rcut_hard)
 
         call get_constant_poly_filter_coeff_array(rjs, atom_widths, rcut_soft, filter_width, 'left', B)
@@ -1612,7 +1612,7 @@ end subroutine
     do j = 1, size(r, 2)
       radial_terms(:, 1, j) = 1.d0
       do i = 2, a_max
-        radial_terms(:, i, j) = radial_terms(:, i-1, j) * r_slice(:, j)
+        radial_terms(:, i, j) = radial_terms(:, i-1, j) *(1.d0 - r(:,j)/rcut)
       end do
     end do
 
