@@ -2648,21 +2648,44 @@ __device__ int warp_red_int(int data) {
 
       // double lim_buffer_array[3][LOCAL_NN];
       //double I0_array[3][(7>alpha_max+4)?7:alpha_max+4][LOCAL_NN];
-__device__
-void M_radial_poly(double I0_array[3][(7>ALPHA_MAX+4)?7:ALPHA_MAX+4][LOCAL_NN],double lim_buffer_array[3][LOCAL_NN],int a_max,int local_nn,double rcut){
+// __device__
+// void M_radial_poly(double I0_array[3][(7>ALPHA_MAX+4)?7:ALPHA_MAX+4][LOCAL_NN],double lim_buffer_array[3][LOCAL_NN],int a_max,int local_nn,double rcut){
     
-  //M_radial_poly(I0_array,lim_buffer_array,a_max,local_nn,rcut);
-    for(int il=0;il<local_nn; il++){
-      I0_array[0][0][il]=1.0;
-      I0_array[1][0][il]=1.0;
-      I0_array[2][0][il]=1.0;
-      for(int ii=1;ii<a_max;ii++){
-        I0_array[0][ii][il]=I0_array[0][ii-1][il]*(1.0-lim_buffer_array[0][il])/rcut;
-        I0_array[1][ii][il]=I0_array[1][ii-1][il]*(1.0-lim_buffer_array[1][il])/rcut;
-        I0_array[2][ii][il]=I0_array[2][ii-1][il]*(1.0-lim_buffer_array[2][il])/rcut;
-      }
+//   //M_radial_poly(I0_array,lim_buffer_array,a_max,local_nn,rcut);
+//     for(int il=0;il<local_nn; il++){
+//       I0_array[0][0][il]=1.0;
+//       I0_array[1][0][il]=1.0;
+//       I0_array[2][0][il]=1.0;
+//       for(int ii=1;ii<a_max;ii++){
+//         I0_array[0][ii][il]=I0_array[0][ii-1][il]*(1.0-lim_buffer_array[0][il])/rcut;
+//         I0_array[1][ii][il]=I0_array[1][ii-1][il]*(1.0-lim_buffer_array[1][il])/rcut;
+//         I0_array[2][ii][il]=I0_array[2][ii-1][il]*(1.0-lim_buffer_array[2][il])/rcut;
+//       }
+//     }
+// }
+
+__device__
+void M_radial_poly(double *I0_array, double *lim_buffer_array, int a_max, int local_nn, double rcut) {
+    for (int il = 0; il < local_nn; il++) {
+        I0_array[0 * a_max * local_nn + 0 * local_nn + il] = 1.0;
+        I0_array[1 * a_max * local_nn + 0 * local_nn + il] = 1.0;
+        I0_array[2 * a_max * local_nn + 0 * local_nn + il] = 1.0;
+
+        for (int ii = 1; ii < a_max; ii++) {
+            I0_array[0 * a_max * local_nn + ii * local_nn + il] =I0_array[0 * a_max * local_nn + (ii - 1) * local_nn + il] *
+                (1.0 - lim_buffer_array[0 * local_nn + il]) / rcut;
+
+            I0_array[1 * a_max * local_nn + ii * local_nn + il] =I0_array[1 * a_max * local_nn + (ii - 1) * local_nn + il] *
+                (1.0 - lim_buffer_array[1 * local_nn + il]) / rcut;
+
+            I0_array[2 * a_max * local_nn + ii * local_nn + il] =I0_array[2 * a_max * local_nn + (ii - 1) * local_nn + il] *
+                (1.0 - lim_buffer_array[2 * local_nn + il]) / rcut;
+        }
     }
 }
+
+
+
  __global__ 
  void cuda_buffer_region(const double* rjs_in, const bool* mask, const double rcut_soft_in, 
                          const double rcut_hard_in, const double atom_sigma_in, 
@@ -2751,18 +2774,18 @@ void M_radial_poly(double I0_array[3][(7>ALPHA_MAX+4)?7:ALPHA_MAX+4][LOCAL_NN],d
   double atom_sigma_scaleds[LOCAL_NN];//[local_nn]
   double  s2s[LOCAL_NN];//[local_nn]
   double atom_widths[LOCAL_NN];//[local_nn];
-  double lim_buffer_array[3][LOCAL_NN];//[local_nn]; 
-  double I0_array[3][(7>ALPHA_MAX+4)?7:ALPHA_MAX+4][LOCAL_NN];//[local_nn]; 
-  double g_aux_left_array[2][ALPHA_MAX][LOCAL_NN];//[local_nn];
-  double g_aux_right_arra[2][ALPHA_MAX][LOCAL_NN];//[local_nn];
-  double M_left_array[2][ALPHA_MAX][LOCAL_NN];//[local_nn];
-  double M_right_array[2][ALPHA_MAX][LOCAL_NN];//[local_nn];
-  double I_left_array[ALPHA_MAX][LOCAL_NN];//[local_nn];
-  double I_right_array[ALPHA_MAX][LOCAL_NN];//[local_nn];
-  double exp_coeff_buffer_array[ALPHA_MAX][LOCAL_NN];//[local_nn];
+  double lim_buffer_array[3*LOCAL_NN];//[local_nn]; 
+  double I0_array[3*(7>ALPHA_MAX+4)?7:ALPHA_MAX+4)*LOCAL_NN];//[local_nn]; 
+  double g_aux_left_array[2*ALPHA_MAX*LOCAL_NN];//[local_nn];
+  double g_aux_right_array[2*ALPHA_MAX*LOCAL_NN];//[local_nn];
+  double M_left_array[2*ALPHA_MAX*LOCAL_NN];//[local_nn];
+  double M_right_array[2*ALPHA_MAX][LOCAL_NN];//[local_nn];
+  double I_left_array[ALPHA_MAX*LOCAL_NN];//[local_nn];
+  double I_right_array[ALPHA_MAX*LOCAL_NN];//[local_nn];
+  double exp_coeff_buffer_array[ALPHA_MAX*LOCAL_NN];//[local_nn];
   double amplitudes[LOCAL_NN];//s[local_nn];
   double amplitudes_der[LOCAL_NN];//[local_nn];
-  double B[LOCAL_NN][7];//[local_nn][7];
+  double B[LOCAL_NN*7];//[local_nn][7];
 
   // if(c_do_derivatives){
 
@@ -2844,7 +2867,7 @@ void M_radial_poly(double I0_array[3][(7>ALPHA_MAX+4)?7:ALPHA_MAX+4][LOCAL_NN],d
       //double I0_array[3][(7>alpha_max+4)?7:alpha_max+4][LOCAL_NN];
       // I0_array = M_radial_poly_array(lim_buffer_array, max(7, alpha_max + 4), rcut_hard)
   int a_max=(7>alpha_max+4)?7:alpha_max+4;
-  M_radial_poly(I0_array,lim_buffer_array,a_max,local_nn,rcut_hard);
+  M_radial_poly(&I0_array[0][0][0],&lim_buffer_array[0][0],a_max,local_nn,rcut_hard);
 }
 
 extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coeff_d, double *exp_coeff_der_d, 
