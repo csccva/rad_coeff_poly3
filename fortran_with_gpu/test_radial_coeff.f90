@@ -93,7 +93,7 @@ program test_radial
                                                        exp_coeff, exp_coeff_der)
   call cpu_time(t2)
 ! Just to make sure the calculation is done with -O3
-  write(*,*) exp_coeff(1:alpha_max, 1)
+  write(*,*) exp_coeff(1:alpha_max, 3)
   write(*,*) t2-t1, "seconds for operator"
   exp_coeff_cp = exp_coeff
   exp_coeff_der_cp = exp_coeff_der
@@ -109,7 +109,9 @@ program test_radial
                                                       exp_coeff, exp_coeff_der)
  call cpu_time(t2)
 ! Just to make sure the calculation is done with -O3
- write(*,*) exp_coeff(1:alpha_max, 1)
+ write(*,*) 
+ write(*,*) 
+ write(*,*) exp_coeff(1:alpha_max, 3)
  write(*,*) t2-t1, "seconds for operator_gpu"
  write(*,*) "Tot Difference between cpu and gpu",    sum(abs(exp_coeff_cp-exp_coeff))
  write(*,*) "Max Difference between cpu and gpu", maxval(abs(exp_coeff_cp-exp_coeff)), maxval(abs(exp_coeff_cp-exp_coeff)/abs(exp_coeff) )

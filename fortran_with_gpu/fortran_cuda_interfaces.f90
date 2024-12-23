@@ -716,20 +716,26 @@ MODULE F_B_C
                 atom_sigma_scaling, atom_sigma_in, atom_sigma, &
                 rjs_in_d, mask_d, &
                 num_scaling_mode , amplitude_scaling, central_weight, &
-                radial_enhancement, c_do_central, rcut_soft, rcut_hard, &
+                radial_enhancement, c_do_central, &
+                rcut_soft, rcut_hard, filter_width, &
+                A_d, &
+                global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d, &
+                global_rjs_idx_d, max_nn, global_nn_d, &
                 stream)  &
                 bind(C,name="gpu_radial_expansion_coefficients_poly3operator")
         use iso_c_binding
         implicit none
         type(c_ptr), value :: exp_coeff_d, exp_coeff_der_d
         type(c_ptr), value :: W_d, k_i_d,n_neigh_d
-        type(c_ptr), value :: rjs_in_d, mask_d
+        type(c_ptr), value :: rjs_in_d, mask_d, A_d
         type(c_ptr) :: stream
+        type(c_ptr), value :: global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d
+        type(c_ptr), value :: global_rjs_idx_d, global_nn_d
         logical(c_bool), value :: c_do_derivatives, c_do_central
-        integer(c_int) :: radial_enhancement
+        integer(c_int),value :: radial_enhancement, max_nn
         integer(c_int),value :: n_exp_coeff,n_exp_coeff_der
         integer(c_int),value :: n_sites, alpha_max, num_scaling_mode
-        real(c_double),value :: rcut_hard,rcut_soft
+        real(c_double),value :: rcut_hard,rcut_soft, filter_width
         real(c_double),value :: rcut_hard_in,rcut_soft_in, amplitude_scaling
         real(c_double),value ::  central_weight
         real(c_double),value :: atom_sigma_scaling, atom_sigma_in, atom_sigma

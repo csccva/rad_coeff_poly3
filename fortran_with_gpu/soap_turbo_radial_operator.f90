@@ -714,18 +714,35 @@ real*8 :: t1, t2
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 integer(c_int) :: n_exp_coeff,n_exp_coeff_der, n_rjs_in
 integer(c_size_t) :: st_size_exp_coeff,st_size_exp_coeff_der,st_W,st_k_i, st_n_neigh
-integer(c_size_t) :: st_mask,st_rjs_in
+integer(c_size_t) :: st_mask,st_rjs_in, st_A
 integer(c_int), allocatable :: k_i(:)
 integer(c_int) :: num_scaling_mode
 type(c_ptr) :: exp_coeff_d, exp_coeff_der_d
 type(c_ptr) :: W_d,k_i_d, n_neigh_d, rjs_in_d
 logical(c_bool) :: c_do_derivatives,c_do_central
-type(c_ptr) :: cublas_handle, gpu_stream, mask_d
+type(c_ptr) :: cublas_handle, gpu_stream, mask_d, A_d
 logical(c_bool), allocatable, target :: new_mask(:)
-integer :: rank
+integer :: rank, max_nn
+integer(c_size_t) :: st_g_I_l,st_g_I_r,st_g_a,st_g_e_b, st_g_rjs_idx,st_g_nn
+type(c_ptr) :: global_amplitudes_d, global_exp_buffer_d
+type(c_ptr) :: global_I_left_array_d, global_I_right_array_d
+type(c_ptr) :: global_rjs_idx_d, global_nn_d
+real(c_double), allocatable :: global_I_left_array(:,:,:)
+real(c_double), allocatable :: global_I_right_array(:,:,:)
+real(c_double), allocatable :: global_amplitudes(:,:)
+real(c_double), allocatable :: global_exp_buffer(:,:,:)
+integer(c_int), allocatable :: global_rjs_idx(:,:),global_nn(:)
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 rank=0
+max_nn=100
+allocate(global_I_left_array(1:max_nn,1:alpha_max,1:n_sites))
+allocate(global_I_right_array(1:max_nn,1:alpha_max,1:n_sites))
+allocate(global_amplitudes(1:max_nn,1:n_sites))
+allocate( global_rjs_idx(1:max_nn,1:n_sites))
+allocate( global_nn(1:n_sites))
+allocate(global_exp_buffer(1:max_nn,1:alpha_max,1:n_sites))
 num_scaling_mode=-100000
+
 call gpu_set_device(rank)
 call create_cublas_handle(cublas_handle, gpu_stream)
 c_do_derivatives=do_derivatives
@@ -768,6 +785,9 @@ end if
 
 allocate( A(1:alpha_max, 1:7) )
 call get_constant_poly_coeff(alpha_max, rcut_hard, A)
+st_A=alpha_max*7*c_double
+call gpu_malloc_all(A_d,st_A,gpu_stream)
+call cpy_htod(c_loc(A),A_d,st_A, gpu_stream)
 
 write(*,*) "Soft Region"
 
@@ -1014,6 +1034,12 @@ k = k + n_neigh(i)
 end do
 
 write(*,*) "Buffer Region"
+global_amplitudes=0.d0
+global_I_left_array=0.d0
+global_I_right_array=0.d0
+global_exp_buffer=0.d0
+global_rjs_idx=0.0
+global_nn=0.0
 
 k = 0
 do i = 1, n_sites
@@ -1036,7 +1062,9 @@ do i = 1, n_sites
 
   !write(*,*) "Buffer_Region_site ", i, " nn is ", nn !, count( rcut_soft_in < rcut_hard_in .and. mask(k+1:k+n_neigh(i)) .and. &
   ! rjs_in(k+1:k+n_neigh(i)) + atom_widths(1:n_neigh(i)) > rcut_soft_in )
-
+  
+  global_nn(i)=nn
+  ! writE(*,*) i, global_nn(i)
   if( nn > 0 )then
     !       These need to be allocated immediately
     allocate( rjs(1:nn) )
@@ -1193,13 +1221,20 @@ do i = 1, n_sites
                                        I0_array(1:nn, 5:alpha_max + 4, 3) - &
                                        matmul( M_right_array(1:nn, 1:7, 2), transpose(A(1:alpha_max, 1:7)) ) * &
                                        I0_array(1:nn, 5:alpha_max + 4, 2)
-    exp_coeff_buffer_array = I_left_array + I_right_array
-    
-    do j = 1, nn
-      k2 = rjs_idx(j)
-      exp_coeff(1:alpha_max, k2) = exp_coeff(1:alpha_max, k2) + &
-      amplitudes(j) * exp_coeff_buffer_array(j, 1:alpha_max)
-    end do
+    !exp_coeff_buffer_array = I_left_array + I_right_array
+
+    !global_exp_buffer(1:nn,1:alpha_max,i)=exp_coeff_buffer_array
+    global_I_left_array(1:nn,1:alpha_max,i)=I_left_array
+    global_I_right_array(1:nn,1:alpha_max,i)=I_right_array
+    global_amplitudes(1:nn,i)=amplitudes
+    global_rjs_idx(1:nn,i)=rjs_idx(1:nn)
+    global_I0_array(1:nn, 1:max(7, alpha_max + 4), 1:3,i)=I0_array(1:nn, 1:max(7, alpha_max + 4), 1:3)
+    global_M_left_array(1:nn, 1:alpha_max, 1:2,i) =
+    ! do j = 1, nn
+    !   k2 = rjs_idx(j)
+    !   exp_coeff(1:alpha_max, k2) = exp_coeff(1:alpha_max, k2) + &
+    !   amplitudes(j) * exp_coeff_buffer_array(j, 1:alpha_max)
+    ! end do
     
     !       Contribution to derivatives
     if( do_derivatives )then      
@@ -1260,6 +1295,30 @@ end do
 if( scaling_mode == "polynomial" )then
   num_scaling_mode=1000
 endif
+
+
+st_g_I_l=max_nn*alpha_max*n_sites*c_double
+st_g_I_r=max_nn*alpha_max*n_sites*c_double
+st_g_a=max_nn*n_sites*c_double
+st_g_e_b=max_nn*alpha_max*n_sites*c_double
+st_g_rjs_idx=max_nn*n_sites*c_int
+st_g_nn=n_sites*c_int
+
+call gpu_malloc_all(global_I_left_array_d,st_g_I_l, gpu_stream)
+call gpu_malloc_all(global_I_right_array_d,st_g_I_r, gpu_stream)
+call gpu_malloc_all(global_amplitudes_d,st_g_a, gpu_stream)
+! call gpu_malloc_all(global_exp_buffer_d, st_g_e_b, gpu_stream)
+call gpu_malloc_all(global_rjs_idx_d, st_g_rjs_idx, gpu_stream)
+call gpu_malloc_all(global_nn_d, st_g_nn, gpu_stream)
+
+call cpy_htod(c_loc(global_I_left_array), global_I_left_array_d,st_g_I_l, gpu_stream)
+call cpy_htod(c_loc(global_I_right_array), global_I_right_array_d,st_g_I_r, gpu_stream)
+call cpy_htod(c_loc(global_amplitudes), global_amplitudes_d,st_g_a, gpu_stream)
+! call cpy_htod(c_loc(global_exp_buffer), global_exp_buffer_d,st_g_e_b, gpu_stream)
+call cpy_htod(c_loc( global_rjs_idx), global_rjs_idx_d, st_g_rjs_idx, gpu_stream)
+call cpy_htod(c_loc( global_nn), global_nn_d, st_g_nn, gpu_stream)
+
+
 n_rjs_in=size(rjs_in,1)
 st_rjs_in=n_rjs_in*sizeof(rjs_in(1))
 call gpu_malloc_all(rjs_in_d, st_rjs_in, gpu_stream)
@@ -1278,7 +1337,7 @@ do i = 1, n_sites
 
   k = k + n_neigh(i)
 
-enddo
+enddo 
 
 st_n_neigh=n_sites*c_int
 st_k_i=n_sites*c_int
@@ -1311,7 +1370,11 @@ call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, &
                 atom_sigma_scaling, atom_sigma_in, atom_sigma, &
                 rjs_in_d, mask_d, &
                 num_scaling_mode, amplitude_scaling, central_weight, &
-                radial_enhancement, c_do_central, rcut_soft, rcut_hard, &
+                radial_enhancement, c_do_central, &
+                rcut_soft, rcut_hard, filter_width, &
+                A_d, &
+                global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d, &
+                global_rjs_idx_d, max_nn, global_nn_d, &
                 gpu_stream) 
 
 call  cpy_dtoh(exp_coeff_d,c_loc(exp_coeff),st_size_exp_coeff,gpu_stream)
