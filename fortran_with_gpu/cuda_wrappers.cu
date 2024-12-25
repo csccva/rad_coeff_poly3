@@ -3112,6 +3112,7 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
                          double *A,
                          double *global_I_left_array, double *global_I_right_array, double *global_amplitudes, double *global_exp_buffer,
                          int *global_rjs_idx, int max_nn, int *global_nn,
+                         double *global_I0_array, double *global_M_left_array, double *global_M_right_array,
                          int radial_enhancement) {
   int tid = threadIdx.x;  // Thread ID within block (same as lane in this case)
   int i=blockIdx.x;
@@ -3147,19 +3148,76 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
   int local_rjs_idx[LOCAL_NN];
   
   int i_t=tid;
+  
+  double M_left_array [2 * ALPHA_MAX * LOCAL_NN];
+  double M_right_array[2 * ALPHA_MAX * LOCAL_NN];
   for(int il=0;il<local_nn;il++){
     if(i_t<nn){
       local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
       amplitudes[il]=global_amplitudes[i_t+max_nn*i];
       for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
-        I_left_array[il+i_alph*LOCAL_NN] =global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
-        I_right_array[il+i_alph*LOCAL_NN]=global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+        //I_left_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+        //I_right_array[il+i_alph*LOCAL_NN] = global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
         //exp_coeff_buffer_array[il+i_alph*LOCAL_NN]=global_exp_buffer[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+        M_left_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+        M_left_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+        M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+        M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+
       }
     }
     i_t+=WARP_SIZE;
   }
-  
+
+  int a_max=(7>alpha_max+4)?7:alpha_max+4;
+  double I0_array[3 * ((7 > ALPHA_MAX + 4) ? 7 : ALPHA_MAX + 4) * LOCAL_NN];
+
+  i_t=tid;
+  for(int il=0;il<local_nn;il++){
+    if(i_t<nn){
+      for(int i_alph=0;i_alph<a_max;i_alph++){
+        I0_array[il+LOCAL_NN*(0*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(0+i*3)*a_max)*max_nn];
+        I0_array[il+LOCAL_NN*(1*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(1+i*3)*a_max)*max_nn];
+        I0_array[il+LOCAL_NN*(2*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(2+i*3)*a_max)*max_nn];
+      }
+    }
+    i_t+=WARP_SIZE;
+  }
+
+
+  for(int il=0;il<local_nn; il++){
+    for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+      double temp1 = 0.0;
+      double temp2 = 0.0;
+      #pragma unroll
+      for(int i_k=0;i_k<7;i_k++){
+        temp1+=M_left_array[il+LOCAL_NN*(1*7+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+        temp2+=M_left_array[il+LOCAL_NN*(0*7+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+      }
+      I_left_array[il+i_alph*LOCAL_NN]=temp1*I0_array[il+LOCAL_NN*(1*a_max+i_alph+4)]-temp2*I0_array[il+LOCAL_NN*(0*a_max+i_alph+4)];
+    }
+  }
+
+  for(int il=0;il<local_nn; il++){
+    for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+      double temp1 = 0.0;
+      double temp2 = 0.0;
+      #pragma unroll
+      for(int i_k=0;i_k<7;i_k++){
+        temp1+=M_right_array[il+LOCAL_NN*(1*7+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+        temp2+=M_right_array[il+LOCAL_NN*(0*7+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+      }
+      I_right_array[il+i_alph*LOCAL_NN]=temp1*I0_array[il+LOCAL_NN*(2*a_max+i_alph+4)]-temp2*I0_array[il+LOCAL_NN*(1*a_max+i_alph+4)];
+      // I_right_array[il+i_alph*LOCAL_NN]=(M_right_array[il+LOCAL_NN*(1*7+0)]*A[i_alph+0*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(1*7+1)]*A[i_alph+1*ALPHA_MAX]
+      //                                   +M_right_array[il+LOCAL_NN*(1*7+2)]*A[i_alph+2*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(1*7+3)]*A[i_alph+3*ALPHA_MAX]
+      //                                   +M_right_array[il+LOCAL_NN*(1*7+4)]*A[i_alph+5*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(1*7+5)]*A[i_alph+5*ALPHA_MAX]
+      //                                   +M_right_array[il+LOCAL_NN*(1*7+6)]*A[i_alph+6*ALPHA_MAX])*I0_array[il+LOCAL_NN*(2*a_max+i_alph+4)]-
+      //                                   (M_right_array[il+LOCAL_NN*(0*7+0)]*A[i_alph+0*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(0*7+1)]*A[i_alph+1*ALPHA_MAX]
+      //                                   +M_right_array[il+LOCAL_NN*(0*7+2)]*A[i_alph+2*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(0*7+3)]*A[i_alph+3*ALPHA_MAX]
+      //                                   +M_right_array[il+LOCAL_NN*(0*7+4)]*A[i_alph+5*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(0*7+5)]*A[i_alph+5*ALPHA_MAX]
+      //                                   +M_right_array[il+LOCAL_NN*(0*7+6)]*A[i_alph+6*ALPHA_MAX])*I0_array[il+LOCAL_NN*(1*a_max+i_alph+4)];
+    }
+  }
 
   for(int il=0;il<local_nn;il++){
     for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
@@ -3186,6 +3244,7 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                      double *A_d,
                      double *global_I_left_array_d, double *global_I_right_array_d, double *global_amplitudes_d, double *global_exp_buffer_d,  
                      int *global_rjs_idx_d, int max_nn, int *global_nn_d,
+                     double *global_I0_array_d, double *global_M_left_array_d, double *global_M_right_array_d, 
                      hipStream_t *stream){
                     
   int warp_size;
@@ -3209,6 +3268,7 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                                             A_d,
                                             global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d,
                                             global_rjs_idx_d, max_nn, global_nn_d,
+                                            global_I0_array_d, global_M_left_array_d, global_M_right_array_d,
                                             radial_enhancement);
 
   dim3 nblocks=dim3((n_sites-1+tpb)/tpb,1,1);

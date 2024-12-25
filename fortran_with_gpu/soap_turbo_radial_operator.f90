@@ -723,24 +723,35 @@ logical(c_bool) :: c_do_derivatives,c_do_central
 type(c_ptr) :: cublas_handle, gpu_stream, mask_d, A_d
 logical(c_bool), allocatable, target :: new_mask(:)
 integer :: rank, max_nn
-integer(c_size_t) :: st_g_I_l,st_g_I_r,st_g_a,st_g_e_b, st_g_rjs_idx,st_g_nn
+integer(c_size_t) :: st_g_I_l,st_g_I_r,st_g_a, st_g_rjs_idx,st_g_nn !,st_g_e_b
 type(c_ptr) :: global_amplitudes_d, global_exp_buffer_d
 type(c_ptr) :: global_I_left_array_d, global_I_right_array_d
 type(c_ptr) :: global_rjs_idx_d, global_nn_d
+type(c_ptr) :: global_I0_array_d, global_M_left_array_d, global_M_right_array_d
 real(c_double), allocatable :: global_I_left_array(:,:,:)
 real(c_double), allocatable :: global_I_right_array(:,:,:)
+! real(c_double), allocatable :: global_exp_buffer(:,:,:)
 real(c_double), allocatable :: global_amplitudes(:,:)
-real(c_double), allocatable :: global_exp_buffer(:,:,:)
 integer(c_int), allocatable :: global_rjs_idx(:,:),global_nn(:)
+real(c_double), allocatable :: global_I0_array(:,:,:,:)
+real(c_double), allocatable :: global_M_left_array(:,:,:,:),global_M_right_array(:,:,:,:)
+integer(c_size_t) :: st_g_I0_a, st_g_M_l_a, st_g_M_r_a
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 rank=0
 max_nn=100
+
 allocate(global_I_left_array(1:max_nn,1:alpha_max,1:n_sites))
 allocate(global_I_right_array(1:max_nn,1:alpha_max,1:n_sites))
 allocate(global_amplitudes(1:max_nn,1:n_sites))
 allocate( global_rjs_idx(1:max_nn,1:n_sites))
 allocate( global_nn(1:n_sites))
-allocate(global_exp_buffer(1:max_nn,1:alpha_max,1:n_sites))
+
+! allocate(global_exp_buffer(1:max_nn,1:alpha_max,1:n_sites))
+
+allocate(global_I0_array(1:max_nn, 1:max(7, alpha_max + 4), 1:3, 1:n_sites))
+allocate(global_M_left_array(1:max_nn, 1:alpha_max, 1:2, 1:n_sites))
+allocate(global_M_right_array(1:max_nn, 1:alpha_max, 1:2, 1:n_sites))
+
 num_scaling_mode=-100000
 
 call gpu_set_device(rank)
@@ -1034,10 +1045,10 @@ k = k + n_neigh(i)
 end do
 
 write(*,*) "Buffer Region"
+! global_I_left_array=0.d0
+! global_I_right_array=0.d0
+! global_exp_buffer=0.d0
 global_amplitudes=0.d0
-global_I_left_array=0.d0
-global_I_right_array=0.d0
-global_exp_buffer=0.d0
 global_rjs_idx=0.0
 global_nn=0.0
 
@@ -1216,20 +1227,26 @@ do i = 1, n_sites
       M_right_array(k2, 1:7, 3) = matmul( -B(1:7, k2), M_radial_monomial(lim_buffer_array(k2, 3), 6) ) * &
       I0_array(k2, 1:7, 3)
     end do
+    global_B(1:7,1:nn,i)=B(1:7,1:nn)
+    global_lim_buffer_array(1:nn,1:3,i)=lim_buffer_array(1:nn,1:3,i)
     
     I_right_array(1:nn, 1:alpha_max) = matmul( M_right_array(1:nn, 1:7, 3), transpose(A(1:alpha_max, 1:7)) ) * &
                                        I0_array(1:nn, 5:alpha_max + 4, 3) - &
                                        matmul( M_right_array(1:nn, 1:7, 2), transpose(A(1:alpha_max, 1:7)) ) * &
                                        I0_array(1:nn, 5:alpha_max + 4, 2)
-    !exp_coeff_buffer_array = I_left_array + I_right_array
+    exp_coeff_buffer_array = I_left_array + I_right_array
 
     !global_exp_buffer(1:nn,1:alpha_max,i)=exp_coeff_buffer_array
-    global_I_left_array(1:nn,1:alpha_max,i)=I_left_array
-    global_I_right_array(1:nn,1:alpha_max,i)=I_right_array
+    !global_I_left_array(1:nn,1:alpha_max,i)=I_left_array
+    ! global_I_right_array(1:nn,1:alpha_max,i)=I_right_array
+
     global_amplitudes(1:nn,i)=amplitudes
     global_rjs_idx(1:nn,i)=rjs_idx(1:nn)
+    
     global_I0_array(1:nn, 1:max(7, alpha_max + 4), 1:3,i)=I0_array(1:nn, 1:max(7, alpha_max + 4), 1:3)
-    global_M_left_array(1:nn, 1:alpha_max, 1:2,i) =
+    ! global_M_left_array(1:nn, 1:alpha_max, 1:2,i) = M_left_array(1:nn, 1:alpha_max, 1:2) 
+    ! global_M_right_array(1:nn, 1:alpha_max, 1:2,i)=M_right_array(1:nn, 1:alpha_max, 2:3) 
+
     ! do j = 1, nn
     !   k2 = rjs_idx(j)
     !   exp_coeff(1:alpha_max, k2) = exp_coeff(1:alpha_max, k2) + &
@@ -1297,24 +1314,41 @@ if( scaling_mode == "polynomial" )then
 endif
 
 
+
+st_g_I0_a=max_nn*max(7, alpha_max + 4)*3*n_sites*c_double
+st_g_M_l_a=max_nn*alpha_max*2*n_sites*c_double
+st_g_M_r_a=max_nn*alpha_max*2*n_sites*c_double
+
+call gpu_malloc_all(global_I0_array_d,st_g_I0_a,gpu_stream)
+call gpu_malloc_all(global_M_left_array_d,st_g_M_l_a,gpu_stream)
+call gpu_malloc_all(global_M_right_array_d,st_g_M_r_a,gpu_stream)
+
+call cpy_htod(c_loc(global_I0_array),global_I0_array_d,st_g_I0_a,gpu_stream)
+call cpy_htod(c_loc(global_M_left_array),global_M_left_array_d,st_g_M_l_a,gpu_stream)
+call cpy_htod(c_loc(global_M_right_array),global_M_right_array_d,st_g_M_r_a,gpu_stream)
+
+
 st_g_I_l=max_nn*alpha_max*n_sites*c_double
 st_g_I_r=max_nn*alpha_max*n_sites*c_double
+! st_g_e_b=max_nn*alpha_max*n_sites*c_double
+
 st_g_a=max_nn*n_sites*c_double
-st_g_e_b=max_nn*alpha_max*n_sites*c_double
 st_g_rjs_idx=max_nn*n_sites*c_int
 st_g_nn=n_sites*c_int
 
 call gpu_malloc_all(global_I_left_array_d,st_g_I_l, gpu_stream)
 call gpu_malloc_all(global_I_right_array_d,st_g_I_r, gpu_stream)
-call gpu_malloc_all(global_amplitudes_d,st_g_a, gpu_stream)
 ! call gpu_malloc_all(global_exp_buffer_d, st_g_e_b, gpu_stream)
+
+call gpu_malloc_all(global_amplitudes_d,st_g_a, gpu_stream)
 call gpu_malloc_all(global_rjs_idx_d, st_g_rjs_idx, gpu_stream)
 call gpu_malloc_all(global_nn_d, st_g_nn, gpu_stream)
 
 call cpy_htod(c_loc(global_I_left_array), global_I_left_array_d,st_g_I_l, gpu_stream)
-call cpy_htod(c_loc(global_I_right_array), global_I_right_array_d,st_g_I_r, gpu_stream)
+ call cpy_htod(c_loc(global_I_right_array), global_I_right_array_d,st_g_I_r, gpu_stream)
+! call cpy_htod(c_loc(global_exp_buffer), global_exp_buffer_d,st_g_e_b, gpu_stream)'
+
 call cpy_htod(c_loc(global_amplitudes), global_amplitudes_d,st_g_a, gpu_stream)
-! call cpy_htod(c_loc(global_exp_buffer), global_exp_buffer_d,st_g_e_b, gpu_stream)
 call cpy_htod(c_loc( global_rjs_idx), global_rjs_idx_d, st_g_rjs_idx, gpu_stream)
 call cpy_htod(c_loc( global_nn), global_nn_d, st_g_nn, gpu_stream)
 
@@ -1369,12 +1403,13 @@ call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, &
                 c_do_derivatives, &
                 atom_sigma_scaling, atom_sigma_in, atom_sigma, &
                 rjs_in_d, mask_d, &
-                num_scaling_mode, amplitude_scaling, central_weight, &
+                num_scaling_mode , amplitude_scaling, central_weight, &
                 radial_enhancement, c_do_central, &
                 rcut_soft, rcut_hard, filter_width, &
                 A_d, &
                 global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d, &
                 global_rjs_idx_d, max_nn, global_nn_d, &
+                global_I0_array_d, global_M_left_array_d, global_M_right_array_d, &
                 gpu_stream) 
 
 call  cpy_dtoh(exp_coeff_d,c_loc(exp_coeff),st_size_exp_coeff,gpu_stream)

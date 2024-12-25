@@ -1,5 +1,5 @@
 # Compiler
-FC = ftn
+FC = ftn # -g -Rb
 FCFLAGS = -fPIC -O3 -h flex_mp=intolerant #-O0 #-O3 -h flex_mp=intolerant
 HIPCC = CC
 HIPFLAGS = -xhip -munsafe-fp-atomics --offload-arch=gfx90a -O3

@@ -721,6 +721,7 @@ MODULE F_B_C
                 A_d, &
                 global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d, &
                 global_rjs_idx_d, max_nn, global_nn_d, &
+                global_I0_array_d, global_M_left_array_d, global_M_right_array_d, &
                 stream)  &
                 bind(C,name="gpu_radial_expansion_coefficients_poly3operator")
         use iso_c_binding
@@ -729,6 +730,7 @@ MODULE F_B_C
         type(c_ptr), value :: W_d, k_i_d,n_neigh_d
         type(c_ptr), value :: rjs_in_d, mask_d, A_d
         type(c_ptr) :: stream
+        type(c_ptr), value :: global_I0_array_d, global_M_left_array_d, global_M_right_array_d
         type(c_ptr), value :: global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d
         type(c_ptr), value :: global_rjs_idx_d, global_nn_d
         logical(c_bool), value :: c_do_derivatives, c_do_central
