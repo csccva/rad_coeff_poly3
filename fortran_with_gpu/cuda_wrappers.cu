@@ -3198,6 +3198,7 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
     for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
       double temp1=0.0;
       double temp2=0.0;
+      #pragma unroll
       for (int i_s=0;i_s<ALPHA_MAX;i_s++){
         temp1+=B_r[i_s+il*7]*M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
         temp2+=B_r[i_s+il*7]*M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*2))];
