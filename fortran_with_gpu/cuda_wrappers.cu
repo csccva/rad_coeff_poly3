@@ -3113,6 +3113,7 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
                          double *global_I_left_array, double *global_I_right_array, double *global_amplitudes, double *global_exp_buffer,
                          int *global_rjs_idx, int max_nn, int *global_nn,
                          double *global_I0_array, double *global_M_left_array, double *global_M_right_array,
+                         double *global_lim_buffer_array, double *global_B_right, double *global_B_left, double *global_M_rad_mono,
                          int radial_enhancement) {
   int tid = threadIdx.x;  // Thread ID within block (same as lane in this case)
   int i=blockIdx.x;
@@ -3124,8 +3125,8 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
   int local_nn ;
   int nn=global_nn[i];
     
-  if(nn>2*WARP_SIZE){
-    printf(" \n Alert!!!! Alert!!! \n nn is bigger than 2 times the warp increase LOCAL_NN! \n nn %d thread %d site %d\n", nn, (int)tid, i+1);
+  if(nn>LOCAL_NN*WARP_SIZE){
+    printf(" \n Alert!!!! Alert!!! \n nn is bigger than LOCAL_NN*WARP_SIZE, LOCAL_NN! \n nn %d thread %d site %d\n", nn, (int)tid, i+1);
   }
 
   if(nn<WARP_SIZE){
@@ -3151,6 +3152,8 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
   
   double M_left_array [2 * ALPHA_MAX * LOCAL_NN];
   double M_right_array[2 * ALPHA_MAX * LOCAL_NN];
+  double M_rad_mono[LOCAL_NN*7*7*3];
+  double B_r[LOCAL_NN*7];
   for(int il=0;il<local_nn;il++){
     if(i_t<nn){
       local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
@@ -3164,6 +3167,14 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
         M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
         M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
 
+      }
+      for(int i_s=0;i_s<7;i_s++){
+        B_r[i_s+il*7]=global_B_right[i_t+max_nn*(i_s+7*i)];
+        for(int i_z=0;i_z<7;i_z++){
+          M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*0))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(0+i*3)))];
+          M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*1))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(1+i*3)))];
+          M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*2))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(2+i*3)))];
+        }
       }
     }
     i_t+=WARP_SIZE;
@@ -3183,7 +3194,18 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
     }
     i_t+=WARP_SIZE;
   }
-
+  for(int il=0;il<local_nn; il++){
+    for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+      double temp1=0.0;
+      double temp2=0.0;
+      for (int i_s=0;i_s<ALPHA_MAX;i_s++){
+        temp1+=B_r[i_s+il*7]*M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
+        temp2+=B_r[i_s+il*7]*M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*2))];
+      }
+      M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=-temp1*I0_array[il+LOCAL_NN*(1*a_max+i_alph)];
+      M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=-temp2*I0_array[il+LOCAL_NN*(2*a_max+i_alph)];
+    }
+  }
 
   for(int il=0;il<local_nn; il++){
     for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
@@ -3245,6 +3267,7 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                      double *global_I_left_array_d, double *global_I_right_array_d, double *global_amplitudes_d, double *global_exp_buffer_d,  
                      int *global_rjs_idx_d, int max_nn, int *global_nn_d,
                      double *global_I0_array_d, double *global_M_left_array_d, double *global_M_right_array_d, 
+                     double *global_lim_buffer_array_d, double *global_B_right_d, double *global_B_left_d, double *global_M_rad_mono_d,
                      hipStream_t *stream){
                     
   int warp_size;
@@ -3269,6 +3292,7 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                                             global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d,
                                             global_rjs_idx_d, max_nn, global_nn_d,
                                             global_I0_array_d, global_M_left_array_d, global_M_right_array_d,
+                                            global_lim_buffer_array_d, global_B_right_d, global_B_left_d, global_M_rad_mono_d,
                                             radial_enhancement);
 
   dim3 nblocks=dim3((n_sites-1+tpb)/tpb,1,1);
