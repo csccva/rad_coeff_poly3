@@ -1209,6 +1209,8 @@ do i = 1, n_sites
     lim_buffer_array(:, 2) = max( rjs, rcut_soft )               ! upper limit left / lower limit right
     lim_buffer_array(:, 3) = min( rcut_hard, rjs + atom_widths ) ! upper limit right
 
+    global_lim_buffer_array(1:nn,1:3,i)=lim_buffer_array(1:nn,1:3)
+
     I0_array = M_radial_poly_array(lim_buffer_array, max(7, alpha_max + 4), rcut_hard)
     
     call get_constant_poly_filter_coeff_array(rjs, atom_widths, rcut_soft, filter_width, 'left', B)
@@ -1219,7 +1221,7 @@ do i = 1, n_sites
       I0_array(k2, 1:7, 1)
       M_left_array(k2, 1:7, 2) = matmul( -B(1:7, k2), M_radial_monomial(lim_buffer_array(k2, 2), 6) ) * &
       I0_array(k2, 1:7, 2)
-      global_M_rad_mono(k2,1:7,1:7,1,i)=M_radial_monomial(lim_buffer_array(k2, 1), 6)
+      !global_M_rad_mono(k2,1:7,1:7,1,i)=M_radial_monomial(lim_buffer_array(k2, 1), 6)
     end do
     
     do k2=1,7
@@ -1239,15 +1241,14 @@ do i = 1, n_sites
       I0_array(k2, 1:7, 2)
       M_right_array(k2, 1:7, 3) = matmul( -B(1:7, k2), M_radial_monomial(lim_buffer_array(k2, 3), 6) ) * &
       I0_array(k2, 1:7, 3)
-      global_M_rad_mono(k2,1:7,1:7,2,i) = M_radial_monomial(lim_buffer_array(k2, 2), 6)
-      global_M_rad_mono(k2,1:7,1:7,3,i) = M_radial_monomial(lim_buffer_array(k2, 3), 6)
+      !global_M_rad_mono(k2,1:7,1:7,2,i) = M_radial_monomial(lim_buffer_array(k2, 2), 6)
+      !global_M_rad_mono(k2,1:7,1:7,3,i) = M_radial_monomial(lim_buffer_array(k2, 3), 6)
     end do
     
     do k2=1,7
       global_B_right(1:nn,k2,i)=B(k2,1:nn)
     enddo
 
-    global_lim_buffer_array(1:nn,1:3,i)=lim_buffer_array(1:nn,1:3)
     
     I_right_array(1:nn, 1:alpha_max) = matmul( M_right_array(1:nn, 1:7, 3), transpose(A(1:alpha_max, 1:7)) ) * &
                                        I0_array(1:nn, 5:alpha_max + 4, 3) - &
@@ -1263,7 +1264,7 @@ do i = 1, n_sites
     global_rjs_idx(1:nn,i)=rjs_idx(1:nn)
     
     global_I0_array(1:nn, 1:max(7, alpha_max + 4), 1:3,i)=I0_array(1:nn, 1:max(7, alpha_max + 4), 1:3)
-    global_M_left_array (1:nn, 1:alpha_max, 1:2,i) =M_left_array (1:nn, 1:alpha_max, 1:2) 
+    !global_M_left_array (1:nn, 1:alpha_max, 1:2,i) =M_left_array (1:nn, 1:alpha_max, 1:2) 
     !global_M_right_array(1:nn, 1:alpha_max, 1:2,i) =M_right_array(1:nn, 1:alpha_max, 2:3) 
 
     ! do j = 1, nn

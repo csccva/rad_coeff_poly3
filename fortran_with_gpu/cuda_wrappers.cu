@@ -2769,7 +2769,7 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
     M[2]=radial_terms[1]*2.0;
     M[3]=radial_terms[2]*3.0;
     M[4]=radial_terms[3]*4.0;
-    M[5]=radial_terms[4]*6.0;
+    M[5]=radial_terms[4]*5.0;
     M[6]=radial_terms[5]*6.0;
   }
   else if(i_M==2){
@@ -2794,11 +2794,51 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
     M[5]=radial_terms[0]*120.0;
     M[6]=radial_terms[1]*720.0;
   }
-  else if(i_M==5){
+  else if(i_M==6){
     M[6]=720.0;
   }
 }
 
+__device__
+void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
+  
+  for(int i_alph=0;i_alph<7;i_alph++){
+    for(int i_d=0;i_d<degree+1;i_d++){
+      M[i_d+7*i_alph]=0.0;
+    }
+  }
+
+  for(int i_d=0;i_d<degree+1;i_d++){
+    M[i_d+7*0]=radial_terms[i_d];
+  }
+
+  M[1+7*1]=radial_terms[0]*1.0;
+  M[2+7*1]=radial_terms[1]*2.0;
+  M[3+7*1]=radial_terms[2]*3.0;
+  M[4+7*1]=radial_terms[3]*4.0;
+  M[5+7*1]=radial_terms[4]*5.0;
+  M[6+7*1]=radial_terms[5]*6.0;
+  
+  M[2+7*2]=radial_terms[0]*2.0;
+  M[3+7*2]=radial_terms[1]*6.0;
+  M[4+7*2]=radial_terms[2]*12.0;
+  M[5+7*2]=radial_terms[3]*20.0;
+  M[6+7*2]=radial_terms[4]*30.0;
+
+  M[3+7*3]=radial_terms[0]*6.0;
+  M[4+7*3]=radial_terms[1]*24.0;
+  M[5+7*3]=radial_terms[2]*60.0;
+  M[6+7*3]=radial_terms[3]*120.0;
+  
+  M[4+7*4]=radial_terms[0]*24.0;
+  M[5+7*4]=radial_terms[1]*120.0;
+  M[6+7*4]=radial_terms[2]*360.0;
+  
+  M[5+7*5]=radial_terms[0]*120.0;
+  M[6+7*5]=radial_terms[1]*720.0;
+  
+  M[6+7*6]=720.0;
+}
 
  __global__ 
  void cuda_buffer_region(double *exp_coeff,
@@ -3168,9 +3208,9 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
         // M_left_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
         // M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
         // M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-        lim_buffer_array[il+0*3]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
-        lim_buffer_array[il+1*3]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
-        lim_buffer_array[il+2*3]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
+        lim_buffer_array[il+0*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
+        lim_buffer_array[il+1*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
+        lim_buffer_array[il+2*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
       }
       for(int i_s=0;i_s<7;i_s++){
         B_r[i_s+il*7]=global_B_right[i_t+max_nn*(i_s+7*i)];
@@ -3199,17 +3239,28 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
     }
     i_t+=WARP_SIZE;
   }
-
-
   
+  double M_radial_monomial_one[7];
+  double M_radial_monomial_two[7];
+  double radial_terms_one[7];
+  double radial_terms_two[7];
+
   for(int il=0;il<local_nn; il++){
+    radial_terms_one[0]=1.0;
+    radial_terms_two[0]=1.0;
+    for(int i_p=1;i_p<7;i_p++){
+      radial_terms_one[i_p]=lim_buffer_array[0*LOCAL_NN+il]*radial_terms_one[i_p-1];
+      radial_terms_two[i_p]=lim_buffer_array[1*LOCAL_NN+il]*radial_terms_two[i_p-1];
+    }
     for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
       double temp1=0.0;
       double temp2=0.0;
+      get_M_radiam_monomial(6,M_radial_monomial_one,radial_terms_one,i_alph);
+      get_M_radiam_monomial(6,M_radial_monomial_two,radial_terms_two,i_alph);
       #pragma unroll
       for (int i_s=0;i_s<ALPHA_MAX;i_s++){
-        temp1+=B_l[i_s+il*7]*M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*0))];
-        temp2+=B_l[i_s+il*7]*M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
+        temp1+=B_l[i_s+il*7]*M_radial_monomial_one[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*0))];
+        temp2+=B_l[i_s+il*7]*M_radial_monomial_two[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
       }
       M_left_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=-temp1*I0_array[il+LOCAL_NN*(0*a_max+i_alph)];
       M_left_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=-temp2*I0_array[il+LOCAL_NN*(1*a_max+i_alph)];
@@ -3217,13 +3268,21 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
   }
 
   for(int il=0;il<local_nn; il++){
+    radial_terms_one[0]=1.0;
+    radial_terms_two[0]=1.0;
+    for(int i_p=1;i_p<7;i_p++){
+      radial_terms_one[i_p]=lim_buffer_array[1*LOCAL_NN+il]*radial_terms_one[i_p-1];
+      radial_terms_two[i_p]=lim_buffer_array[2*LOCAL_NN+il]*radial_terms_two[i_p-1];
+    }
     for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
       double temp1=0.0;
       double temp2=0.0;
+      get_M_radiam_monomial(6,M_radial_monomial_one,radial_terms_one,i_alph);
+      get_M_radiam_monomial(6,M_radial_monomial_two,radial_terms_two,i_alph);
       #pragma unroll
       for (int i_s=0;i_s<ALPHA_MAX;i_s++){
-        temp1+=B_r[i_s+il*7]*M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
-        temp2+=B_r[i_s+il*7]*M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*2))];
+        temp1+=B_r[i_s+il*7]*M_radial_monomial_one[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
+        temp2+=B_r[i_s+il*7]*M_radial_monomial_two[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*2))];
       }
       M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=-temp1*I0_array[il+LOCAL_NN*(1*a_max+i_alph)];
       M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=-temp2*I0_array[il+LOCAL_NN*(2*a_max+i_alph)];
@@ -3253,14 +3312,6 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
         temp2+=M_right_array[il+LOCAL_NN*(0*7+i_k)]*A[i_alph+i_k*ALPHA_MAX];
       }
       I_right_array[il+i_alph*LOCAL_NN]=temp1*I0_array[il+LOCAL_NN*(2*a_max+i_alph+4)]-temp2*I0_array[il+LOCAL_NN*(1*a_max+i_alph+4)];
-      // I_right_array[il+i_alph*LOCAL_NN]=(M_right_array[il+LOCAL_NN*(1*7+0)]*A[i_alph+0*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(1*7+1)]*A[i_alph+1*ALPHA_MAX]
-      //                                   +M_right_array[il+LOCAL_NN*(1*7+2)]*A[i_alph+2*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(1*7+3)]*A[i_alph+3*ALPHA_MAX]
-      //                                   +M_right_array[il+LOCAL_NN*(1*7+4)]*A[i_alph+5*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(1*7+5)]*A[i_alph+5*ALPHA_MAX]
-      //                                   +M_right_array[il+LOCAL_NN*(1*7+6)]*A[i_alph+6*ALPHA_MAX])*I0_array[il+LOCAL_NN*(2*a_max+i_alph+4)]-
-      //                                   (M_right_array[il+LOCAL_NN*(0*7+0)]*A[i_alph+0*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(0*7+1)]*A[i_alph+1*ALPHA_MAX]
-      //                                   +M_right_array[il+LOCAL_NN*(0*7+2)]*A[i_alph+2*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(0*7+3)]*A[i_alph+3*ALPHA_MAX]
-      //                                   +M_right_array[il+LOCAL_NN*(0*7+4)]*A[i_alph+5*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(0*7+5)]*A[i_alph+5*ALPHA_MAX]
-      //                                   +M_right_array[il+LOCAL_NN*(0*7+6)]*A[i_alph+6*ALPHA_MAX])*I0_array[il+LOCAL_NN*(1*a_max+i_alph+4)];
     }
   }
 
