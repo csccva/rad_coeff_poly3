@@ -3213,23 +3213,28 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
         // M_left_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
         // M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
         // M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-        lim_buffer_array[il+0*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
-        lim_buffer_array[il+1*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
-        lim_buffer_array[il+2*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
+        // lim_buffer_array[il+0*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
+        // lim_buffer_array[il+1*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
+        // lim_buffer_array[il+2*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
       }
       for(int i_s=0;i_s<7;i_s++){
          //B_r[i_s+il*7]=global_B_right[i_t+max_nn*(i_s+7*i)];
          //B_l[i_s+il*7]=global_B_left[i_t+max_nn*(i_s+7*i)];
         for(int i_z=0;i_z<7;i_z++){
-          M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*0))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(0+i*3)))];
-          M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*1))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(1+i*3)))];
-          M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*2))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(2+i*3)))];
+          //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*0))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(0+i*3)))];
+          //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*1))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(1+i*3)))];
+          //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*2))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(2+i*3)))];
         }
       }
     }
     i_t+=WARP_SIZE;
   }
-  
+  for(int il=0;il<local_nn;il++){
+    lim_buffer_array[il+0*LOCAL_NN] = (rcut_soft > local_rjs[il] - atom_widths[il])? rcut_soft : local_rjs[il] - atom_widths[il]; // lower limit left
+    lim_buffer_array[il+1*LOCAL_NN] = (local_rjs[il] > rcut_soft) ? local_rjs[il]  : rcut_soft; // upper limit left / lower limit right
+    lim_buffer_array[il+2*LOCAL_NN] = (rcut_hard < local_rjs[il] + atom_widths[il]) ? rcut_hard : local_rjs[il] + atom_widths[il]; // upper limit right 
+  }
+
   int l_rjs_size=local_nn;
   int atom_widths_size=local_nn;
   int B_size=local_nn*7;

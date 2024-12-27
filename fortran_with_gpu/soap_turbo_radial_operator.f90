@@ -1212,6 +1212,9 @@ do i = 1, n_sites
     global_lim_buffer_array(1:nn,1:3,i)=lim_buffer_array(1:nn,1:3)
 
     I0_array = M_radial_poly_array(lim_buffer_array, max(7, alpha_max + 4), rcut_hard)
+
+    global_amplitudes(1:nn,i)=amplitudes
+    global_rjs_idx(1:nn,i)=rjs_idx(1:nn)
     
     global_rjs(1:nn, i)=rjs(1:nn)
     global_atom_widths(1:nn,i)=atom_widths(1:nn) 
@@ -1262,9 +1265,6 @@ do i = 1, n_sites
     !global_exp_buffer(1:nn,1:alpha_max,i)=exp_coeff_buffer_array
     !global_I_left_array(1:nn,1:alpha_max,i)=I_left_array
     !global_I_right_array(1:nn,1:alpha_max,i)=I_right_array
-
-    global_amplitudes(1:nn,i)=amplitudes
-    global_rjs_idx(1:nn,i)=rjs_idx(1:nn)
     
     !global_I0_array(1:nn, 1:max(7, alpha_max + 4), 1:3,i)=I0_array(1:nn, 1:max(7, alpha_max + 4), 1:3)
     !global_M_left_array (1:nn, 1:alpha_max, 1:2,i) =M_left_array (1:nn, 1:alpha_max, 1:2) 
