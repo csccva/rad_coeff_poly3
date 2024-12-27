@@ -2649,19 +2649,19 @@ __device__ int warp_red_int(int data) {
 __device__
 void M_radial_poly(double *I0_array, double *lim_buffer_array, int a_max, int local_nn, double rcut) {
     for (int il = 0; il < local_nn; il++) {
-        I0_array[0 * a_max * local_nn + 0 * local_nn + il] = 1.0;
-        I0_array[1 * a_max * local_nn + 0 * local_nn + il] = 1.0;
-        I0_array[2 * a_max * local_nn + 0 * local_nn + il] = 1.0;
+        I0_array[0 * a_max * LOCAL_NN + 0 * LOCAL_NN + il] = 1.0;
+        I0_array[1 * a_max * LOCAL_NN + 0 * LOCAL_NN + il] = 1.0;
+        I0_array[2 * a_max * LOCAL_NN + 0 * LOCAL_NN + il] = 1.0;
 
         for (int ii = 1; ii < a_max; ii++) {
-            I0_array[0 * a_max * local_nn + ii * local_nn + il] =I0_array[0 * a_max * local_nn + (ii - 1) * local_nn + il] *
-                (1.0 - lim_buffer_array[0 * local_nn + il]) / rcut;
+            I0_array[0 * a_max * LOCAL_NN + ii * LOCAL_NN + il] =I0_array[0 * a_max * LOCAL_NN + (ii - 1) * LOCAL_NN + il] *
+                (1.0 - lim_buffer_array[0 * LOCAL_NN + il]) / rcut;
 
-            I0_array[1 * a_max * local_nn + ii * local_nn + il] =I0_array[1 * a_max * local_nn + (ii - 1) * local_nn + il] *
-                (1.0 - lim_buffer_array[1 * local_nn + il]) / rcut;
+            I0_array[1 * a_max * LOCAL_NN + ii * LOCAL_NN + il] =I0_array[1 * a_max * LOCAL_NN + (ii - 1) * LOCAL_NN + il] *
+                (1.0 - lim_buffer_array[1 * LOCAL_NN + il]) / rcut;
 
-            I0_array[2 * a_max * local_nn + ii * local_nn + il] =I0_array[2 * a_max * local_nn + (ii - 1) * local_nn + il] *
-                (1.0 - lim_buffer_array[2 * local_nn + il]) / rcut;
+            I0_array[2 * a_max * LOCAL_NN + ii * LOCAL_NN + il] =I0_array[2 * a_max * LOCAL_NN + (ii - 1) * LOCAL_NN + il] *
+                (1.0 - lim_buffer_array[2 * LOCAL_NN + il]) / rcut;
         }
     }
 }
@@ -3244,13 +3244,15 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   for(int il=0;il<local_nn;il++){
     if(i_t<nn){
       for(int i_alph=0;i_alph<a_max;i_alph++){
-        I0_array[il+LOCAL_NN*(0*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(0+i*3)*a_max)*max_nn];
-        I0_array[il+LOCAL_NN*(1*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(1+i*3)*a_max)*max_nn];
-        I0_array[il+LOCAL_NN*(2*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(2+i*3)*a_max)*max_nn];
+        //  I0_array[il+LOCAL_NN*(0*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(0+i*3)*a_max)*max_nn];
+        //  I0_array[il+LOCAL_NN*(1*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(1+i*3)*a_max)*max_nn];
+        //  I0_array[il+LOCAL_NN*(2*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(2+i*3)*a_max)*max_nn];
       }
     }
     i_t+=WARP_SIZE;
   }
+
+  M_radial_poly(I0_array,lim_buffer_array,a_max,local_nn,rcut_hard);
   
   double M_radial_monomial_one[7];
   double M_radial_monomial_two[7];
