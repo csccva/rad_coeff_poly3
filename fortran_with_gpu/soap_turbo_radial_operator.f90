@@ -730,6 +730,7 @@ type(c_ptr) :: global_rjs_idx_d, global_nn_d
 type(c_ptr) :: global_I0_array_d, global_M_left_array_d, global_M_right_array_d
 type(c_ptr) :: global_B_right_d,global_B_left_d
 type(c_ptr) :: global_lim_buffer_array_d, global_M_rad_mono_d
+type(c_ptr) :: global_atom_widths_d, global_rjs_d
 real(c_double), allocatable :: global_I_left_array(:,:,:)
 real(c_double), allocatable :: global_I_right_array(:,:,:)
 ! real(c_double), allocatable :: global_exp_buffer(:,:,:)
@@ -737,9 +738,11 @@ real(c_double), allocatable :: global_amplitudes(:,:)
 integer(c_int), allocatable :: global_rjs_idx(:,:),global_nn(:)
 real(c_double), allocatable :: global_I0_array(:,:,:,:)
 real(c_double), allocatable :: global_M_left_array(:,:,:,:),global_M_right_array(:,:,:,:)
+integer(c_size_t) :: st_g_rjs, st_g_a_w
 integer(c_size_t) :: st_g_I0_a, st_g_M_l_a, st_g_M_r_a,st_g_lim_b,st_g_B,st_g_M_rad_m
 real(c_double), allocatable :: global_M_rad_mono(:,:,:,:,:)
 real(c_double), allocatable :: global_lim_buffer_array(:,:,:),global_B_right(:,:,:),global_B_left(:,:,:)
+real(c_double), allocatable :: global_atom_widths(:,:),global_rjs(:,:)
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 rank=0
 max_nn=100
@@ -759,6 +762,9 @@ allocate(global_lim_buffer_array(1:max_nn,1:3,1:n_sites))
 allocate(global_B_right(1:max_nn,1:7,1:n_sites))
 allocate(global_B_left(1:max_nn,1:7,1:n_sites))
 allocate(global_M_rad_mono(1:max_nn,1:7,1:7,1:3,1:n_sites))
+
+allocate(global_atom_widths(1:max_nn,n_sites))
+allocate(global_rjs(1:max_nn,n_sites))
 
 num_scaling_mode=-100000
 
@@ -1053,12 +1059,6 @@ k = k + n_neigh(i)
 end do
 
 write(*,*) "Buffer Region"
-! global_I_left_array=0.d0
-! global_I_right_array=0.d0
-! global_exp_buffer=0.d0
-global_amplitudes=0.d0
-global_rjs_idx=0.0
-global_nn=0.0
 
 k = 0
 do i = 1, n_sites
@@ -1213,6 +1213,9 @@ do i = 1, n_sites
 
     I0_array = M_radial_poly_array(lim_buffer_array, max(7, alpha_max + 4), rcut_hard)
     
+    global_rjs(1:nn, i)=rjs(1:nn)
+    global_atom_widths(1:nn,i)=atom_widths(1:nn) 
+
     call get_constant_poly_filter_coeff_array(rjs, atom_widths, rcut_soft, filter_width, 'left', B)
     
     !       We should try to figure out a more "vectorized way" of doing this
@@ -1224,9 +1227,9 @@ do i = 1, n_sites
       !global_M_rad_mono(k2,1:7,1:7,1,i)=M_radial_monomial(lim_buffer_array(k2, 1), 6)
     end do
     
-    do k2=1,7
-      global_B_left(1:nn,k2,i)=B(k2,1:nn)
-    enddo
+    ! do k2=1,7
+    !   global_B_left(1:nn,k2,i)=B(k2,1:nn)
+    ! enddo
     
     I_left_array(1:nn, 1:alpha_max) = matmul( M_left_array(1:nn, 1:7, 2), transpose(A(1:alpha_max, 1:7)) ) * &
                                       I0_array(1:nn, 5:alpha_max + 4, 2) - &
@@ -1245,9 +1248,9 @@ do i = 1, n_sites
       !global_M_rad_mono(k2,1:7,1:7,3,i) = M_radial_monomial(lim_buffer_array(k2, 3), 6)
     end do
     
-    do k2=1,7
-      global_B_right(1:nn,k2,i)=B(k2,1:nn)
-    enddo
+    ! do k2=1,7
+    !   global_B_right(1:nn,k2,i)=B(k2,1:nn)
+    ! enddo
 
     
     I_right_array(1:nn, 1:alpha_max) = matmul( M_right_array(1:nn, 1:7, 3), transpose(A(1:alpha_max, 1:7)) ) * &
@@ -1332,6 +1335,15 @@ end do
 if( scaling_mode == "polynomial" )then
   num_scaling_mode=1000
 endif
+
+
+st_g_rjs=max_nn*n_sites*c_double 
+st_g_a_w=max_nn*n_sites*c_double 
+
+call gpu_malloc_all(global_atom_widths_d, st_g_a_w,gpu_stream)
+call gpu_malloc_all(global_rjs_d, st_g_rjs,gpu_stream)
+call cpy_htod(c_loc(global_atom_widths),global_atom_widths_d, st_g_a_w,gpu_stream)
+call cpy_htod(c_loc(global_rjs),global_rjs_d, st_g_rjs,gpu_stream)
 
 st_g_M_rad_m=max_nn*7*7*3*n_sites*c_double 
 call gpu_malloc_all(global_M_rad_mono_d,st_g_M_rad_m,gpu_stream)
@@ -1444,6 +1456,7 @@ call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, &
                 global_rjs_idx_d, max_nn, global_nn_d, &
                 global_I0_array_d, global_M_left_array_d, global_M_right_array_d, &
                 global_lim_buffer_array_d, global_B_right_d, global_B_left_d, global_M_rad_mono_d, &
+                global_rjs_d, global_atom_widths_d, &
                 gpu_stream) 
 
 call  cpy_dtoh(exp_coeff_d,c_loc(exp_coeff),st_size_exp_coeff,gpu_stream)
