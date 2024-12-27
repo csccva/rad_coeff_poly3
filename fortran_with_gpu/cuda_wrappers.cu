@@ -2633,7 +2633,7 @@ void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int
 }
 
 #define WARP_SIZE 64 // 32 for cuda!!!!!!
-#define LOCAL_NN 2
+#define LOCAL_NN 1
 #define ALPHA_MAX 7
 __device__ int warp_red_int(int data) {
 
@@ -3194,21 +3194,31 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   if(nn>LOCAL_NN*WARP_SIZE){
     printf(" \n Alert!!!! Alert!!! \n nn is bigger than LOCAL_NN*WARP_SIZE, LOCAL_NN! \n nn %d thread %d site %d\n", nn, (int)tid, i+1);
   }
-
-  if(nn<WARP_SIZE){
-    local_nn=0;
-    if(tid<nn){
-      local_nn=1;
-    }
+  // redefine local_nn
+  if(tid<nn%WARP_SIZE){
+    local_nn=(nn+WARP_SIZE-1)/WARP_SIZE;
   }
-  if(nn>=WARP_SIZE && nn<2*WARP_SIZE){
-    local_nn=1;
-    if(tid<nn%WARP_SIZE){
-      local_nn=2;
-    }
+  else{
+    local_nn=nn/WARP_SIZE;
   }
 
-  int local_rjs_idx[LOCAL_NN];
+  // if(nn<WARP_SIZE){
+  //   local_nn=0;
+  //   if(tid<nn){
+  //     local_nn=1;
+  //   }
+  // }
+  // if(nn>=WARP_SIZE && nn<2*WARP_SIZE){
+  //   local_nn=1;
+  //   if(tid<nn%WARP_SIZE){
+  //     local_nn=2;
+  //   }
+  // }
+
+
+  if(local_nn>0){
+      
+    int local_rjs_idx[LOCAL_NN];
   double local_rjs[LOCAL_NN];
   double atom_widths[LOCAL_NN];
   
@@ -3244,7 +3254,6 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
     i_t+=WARP_SIZE;
   }
 
-  if(local_nn>0){
     double amplitudes[LOCAL_NN];
   double amplitudes_der[LOCAL_NN];
   double exp_coeff_buffer_array[LOCAL_NN*ALPHA_MAX];
