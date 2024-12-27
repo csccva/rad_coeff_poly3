@@ -2856,10 +2856,6 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   int k=k_i[i];
   int n_neighbors = n_neigh[i];  // Number of neighbors to process
   double pi=acos(-1.0);
-  if(ALPHA_MAX!=alpha_max){
-    printf("\n Alert alpha_max variable! \n Fix ALPHA_MAX!\n");
-  }
-
   // Initialize local count for this thread
   int local_nn = 0;
 
@@ -3163,8 +3159,37 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   double pi=acos(-1.0);
 
   // Initialize local count for this thread
-  int local_nn ;
-  int nn=global_nn[i];
+  
+  // Initialize local count for this thread
+  int local_nn = 0;
+
+  // Constants for atom_widths computation
+  const double factor = 2.0 * sqrt(2.0 * log(2.0));
+
+  // Iterate through neighbors assigned to this thread
+  for (int j = tid; j < n_neighbors; j += WARP_SIZE) {
+    int idx = k +j;
+
+    // Compute atom_widths for the current neighbor
+    double atom_widths = factor * (atom_sigma_in + atom_sigma_scaling * rjs_in[idx]);
+
+    // Evaluate the conditions
+    bool condition = (rcut_soft_in < rcut_hard_in) && mask[idx] &&
+                         (rjs_in[idx] + atom_widths> rcut_soft_in);
+
+    // Increment local count if condition is true
+    if (condition) {
+      local_nn++;
+    }
+
+  }
+
+  int warp_nn= warp_red_int(local_nn);
+    // Broadcast the computed warp_nn to all threads in the warp
+    // HIP: Use __shfl
+    // CUDA Equivalent:
+    // int broadcasted_nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0);
+  int nn = __shfl(warp_nn, 0);
     
   if(nn>LOCAL_NN*WARP_SIZE){
     printf(" \n Alert!!!! Alert!!! \n nn is bigger than LOCAL_NN*WARP_SIZE, LOCAL_NN! \n nn %d thread %d site %d\n", nn, (int)tid, i+1);
@@ -3182,23 +3207,10 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
       local_nn=2;
     }
   }
-  
-  double amplitudes[LOCAL_NN];
-  double amplitudes_der[LOCAL_NN];
-  double exp_coeff_buffer_array[LOCAL_NN*ALPHA_MAX];
-  double I_left_array[LOCAL_NN*ALPHA_MAX];
-  double I_right_array[LOCAL_NN*ALPHA_MAX];
+
   int local_rjs_idx[LOCAL_NN];
   double local_rjs[LOCAL_NN];
   double atom_widths[LOCAL_NN];
-  double atom_sigma_scaleds[LOCAL_NN];
-  double s2s[LOCAL_NN];
-  double M_left_array [2 * ALPHA_MAX * LOCAL_NN];
-  double M_right_array[2 * ALPHA_MAX * LOCAL_NN];
-  double M_rad_mono[LOCAL_NN*7*7*3];
-  double B_r[LOCAL_NN*7];
-  double B_l[LOCAL_NN*7];
-  double lim_buffer_array[LOCAL_NN*3];
   
   int i_t=tid;
   for(int il=0;il<local_nn;il++){
@@ -3232,7 +3244,21 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
     i_t+=WARP_SIZE;
   }
 
-  
+  if(local_nn>0){
+    double amplitudes[LOCAL_NN];
+  double amplitudes_der[LOCAL_NN];
+  double exp_coeff_buffer_array[LOCAL_NN*ALPHA_MAX];
+  double I_left_array[LOCAL_NN*ALPHA_MAX];
+  double I_right_array[LOCAL_NN*ALPHA_MAX];
+  double atom_sigma_scaleds[LOCAL_NN];
+  double s2s[LOCAL_NN];
+  double M_left_array [2 * ALPHA_MAX * LOCAL_NN];
+  double M_right_array[2 * ALPHA_MAX * LOCAL_NN];
+  double M_rad_mono[LOCAL_NN*7*7*3];
+  double B_r[LOCAL_NN*7];
+  double B_l[LOCAL_NN*7];
+  double lim_buffer_array[LOCAL_NN*3];
+
   double local_atom_width_scaling = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaling;
   for(int il=0;il<local_nn;il++){
     atom_sigma_scaleds[il]=atom_sigma+atom_sigma_scaling*local_rjs[il];
@@ -3311,17 +3337,17 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   int a_max=(7>alpha_max+4)?7:alpha_max+4;
   double I0_array[3 * ((7 > ALPHA_MAX + 4) ? 7 : ALPHA_MAX + 4) * LOCAL_NN];
 
-  i_t=tid;
-  for(int il=0;il<local_nn;il++){
-    if(i_t<nn){
-      for(int i_alph=0;i_alph<a_max;i_alph++){
-        //  I0_array[il+LOCAL_NN*(0*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(0+i*3)*a_max)*max_nn];
-        //  I0_array[il+LOCAL_NN*(1*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(1+i*3)*a_max)*max_nn];
-        //  I0_array[il+LOCAL_NN*(2*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(2+i*3)*a_max)*max_nn];
-      }
-    }
-    i_t+=WARP_SIZE;
-  }
+  // i_t=tid;
+  // for(int il=0;il<local_nn;il++){
+  //   if(i_t<nn){
+  //     for(int i_alph=0;i_alph<a_max;i_alph++){
+  //       //  I0_array[il+LOCAL_NN*(0*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(0+i*3)*a_max)*max_nn];
+  //       //  I0_array[il+LOCAL_NN*(1*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(1+i*3)*a_max)*max_nn];
+  //       //  I0_array[il+LOCAL_NN*(2*a_max+i_alph)]=global_I0_array[i_t+(i_alph+(2+i*3)*a_max)*max_nn];
+  //     }
+  //   }
+  //   i_t+=WARP_SIZE;
+  // }
 
   M_radial_poly(I0_array,lim_buffer_array,a_max,local_nn,rcut_hard);
   
@@ -3414,6 +3440,7 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
     for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
       exp_coeff[i_alph+k2*ALPHA_MAX]+=amplitudes[il]*exp_coeff_buffer_array[il+i_alph*LOCAL_NN];
     }
+  }
   }
 }
 extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coeff_d, double *exp_coeff_der_d, 
