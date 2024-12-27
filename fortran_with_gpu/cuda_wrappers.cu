@@ -3154,6 +3154,8 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
   double M_right_array[2 * ALPHA_MAX * LOCAL_NN];
   double M_rad_mono[LOCAL_NN*7*7*3];
   double B_r[LOCAL_NN*7];
+  double B_l[LOCAL_NN*7];
+  double lim_buffer_array[LOCAL_NN*3];
   for(int il=0;il<local_nn;il++){
     if(i_t<nn){
       local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
@@ -3162,14 +3164,17 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
         //I_left_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
         //I_right_array[il+i_alph*LOCAL_NN] = global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
         //exp_coeff_buffer_array[il+i_alph*LOCAL_NN]=global_exp_buffer[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
-        M_left_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-        M_left_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-        M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-        M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-
+        // M_left_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+        // M_left_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+        // M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+        // M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+        lim_buffer_array[il+0*3]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
+        lim_buffer_array[il+1*3]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
+        lim_buffer_array[il+2*3]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
       }
       for(int i_s=0;i_s<7;i_s++){
         B_r[i_s+il*7]=global_B_right[i_t+max_nn*(i_s+7*i)];
+        B_l[i_s+il*7]=global_B_left[i_t+max_nn*(i_s+7*i)];
         for(int i_z=0;i_z<7;i_z++){
           M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*0))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(0+i*3)))];
           M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*1))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(1+i*3)))];
@@ -3194,6 +3199,23 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
     }
     i_t+=WARP_SIZE;
   }
+
+
+  
+  for(int il=0;il<local_nn; il++){
+    for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+      double temp1=0.0;
+      double temp2=0.0;
+      #pragma unroll
+      for (int i_s=0;i_s<ALPHA_MAX;i_s++){
+        temp1+=B_l[i_s+il*7]*M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*0))];
+        temp2+=B_l[i_s+il*7]*M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
+      }
+      M_left_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=-temp1*I0_array[il+LOCAL_NN*(0*a_max+i_alph)];
+      M_left_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=-temp2*I0_array[il+LOCAL_NN*(1*a_max+i_alph)];
+    }
+  }
+
   for(int il=0;il<local_nn; il++){
     for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
       double temp1=0.0;
