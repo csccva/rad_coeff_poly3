@@ -1209,15 +1209,15 @@ do i = 1, n_sites
     lim_buffer_array(:, 2) = max( rjs, rcut_soft )               ! upper limit left / lower limit right
     lim_buffer_array(:, 3) = min( rcut_hard, rjs + atom_widths ) ! upper limit right
 
-    global_lim_buffer_array(1:nn,1:3,i)=lim_buffer_array(1:nn,1:3)
+    ! global_lim_buffer_array(1:nn,1:3,i)=lim_buffer_array(1:nn,1:3)
 
     I0_array = M_radial_poly_array(lim_buffer_array, max(7, alpha_max + 4), rcut_hard)
 
-    global_amplitudes(1:nn,i)=amplitudes
+    ! global_amplitudes(1:nn,i)=amplitudes
     global_rjs_idx(1:nn,i)=rjs_idx(1:nn)
     
     global_rjs(1:nn, i)=rjs(1:nn)
-    global_atom_widths(1:nn,i)=atom_widths(1:nn) 
+    ! global_atom_widths(1:nn,i)=atom_widths(1:nn) 
 
     call get_constant_poly_filter_coeff_array(rjs, atom_widths, rcut_soft, filter_width, 'left', B)
     
