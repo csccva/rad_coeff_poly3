@@ -3184,27 +3184,29 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   }
   
   double amplitudes[LOCAL_NN];
+  double amplitudes_der[LOCAL_NN];
   double exp_coeff_buffer_array[LOCAL_NN*ALPHA_MAX];
   double I_left_array[LOCAL_NN*ALPHA_MAX];
   double I_right_array[LOCAL_NN*ALPHA_MAX];
   int local_rjs_idx[LOCAL_NN];
   double local_rjs[LOCAL_NN];
   double atom_widths[LOCAL_NN];
-  
-  int i_t=tid;
-  
+  double atom_sigma_scaleds[LOCAL_NN];
+  double s2s[LOCAL_NN];
   double M_left_array [2 * ALPHA_MAX * LOCAL_NN];
   double M_right_array[2 * ALPHA_MAX * LOCAL_NN];
   double M_rad_mono[LOCAL_NN*7*7*3];
   double B_r[LOCAL_NN*7];
   double B_l[LOCAL_NN*7];
   double lim_buffer_array[LOCAL_NN*3];
+  
+  int i_t=tid;
   for(int il=0;il<local_nn;il++){
     if(i_t<nn){
       local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
-      amplitudes[il]=global_amplitudes[i_t+max_nn*i];
+      //amplitudes[il]=global_amplitudes[i_t+max_nn*i];
       local_rjs[il]=global_rjs[i_t+max_nn*i];
-      atom_widths[il]=global_atom_widths[i_t+max_nn*i];
+      //atom_widths[il]=global_atom_widths[i_t+max_nn*i];
       for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
         //I_left_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
         //I_right_array[il+i_alph*LOCAL_NN] = global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
@@ -3229,6 +3231,70 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
     }
     i_t+=WARP_SIZE;
   }
+
+  
+  double local_atom_width_scaling = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaling;
+  for(int il=0;il<local_nn;il++){
+    atom_sigma_scaleds[il]=atom_sigma+atom_sigma_scaling*local_rjs[il];
+    s2s[il]=atom_sigma_scaleds[il]*atom_sigma_scaleds[il];
+    atom_widths[il] = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaleds[il];
+  }
+  double atom_width_scaling = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaling;
+  if( scaling_mode == 1000 ){
+    if( amplitude_scaling == 0.0 ){
+      for(int il=0;il<local_nn;il++){
+        amplitudes[il] = 1.0 / atom_sigma_scaleds[il];
+        amplitudes_der[il] = - atom_sigma_scaling / s2s[il];
+      }
+    }
+    else{
+      if( amplitude_scaling == 1.0 ) {
+        for(int il=0;il<local_nn;il++){
+          amplitudes[il] = 1.0 / atom_sigma_scaleds[il] * ( 1.0 + 2.0*local_rjs[il]*local_rjs[il]*local_rjs[il] - 3.0*local_rjs[il]*local_rjs[il] );
+          amplitudes_der[il] = 6.0 / atom_sigma_scaleds[il] * (local_rjs[il]*local_rjs[il] - local_rjs[il]) 
+                          - atom_sigma_scaling / atom_sigma_scaleds[il] * amplitudes[il];
+        }
+      }
+      else{
+        for(int il=0;il<local_nn;il++){
+          amplitudes[il] = pow((1.0 / atom_sigma_scaleds[il] * ( 1.0 + 2.0*local_rjs[il]*local_rjs[il]*local_rjs[il] - 3.0*local_rjs[il]*local_rjs[il] )),amplitude_scaling);
+          amplitudes_der[il] =pow( (6.0*amplitude_scaling / atom_sigma_scaleds[il] * (local_rjs[il]*local_rjs[il] - local_rjs[il]) 
+                       * ( 1.0 + 2.0*local_rjs[il]*local_rjs[il]*local_rjs[il] - 3.0*local_rjs[il]*local_rjs[il] )),(amplitude_scaling - 1.0))
+                       - atom_sigma_scaling / atom_sigma_scaleds[il] * amplitudes[il];
+        }
+      }
+    }
+  }
+  if(nn>0){
+    if(tid==0){
+      amplitudes[0]=central_weight*amplitudes[0];
+      amplitudes_der[0]=central_weight*amplitudes_der[0];
+    }
+  }
+  if( radial_enhancement == 1 ){
+    for(int il=0;il<local_nn;il++){
+      amplitudes_der[il] = amplitudes[il] * ( 1.0 + sqrt(2.0/pi)*atom_sigma_scaling ) + 
+                       amplitudes_der[il] * ( local_rjs[il] + sqrt(2.0/pi)*atom_sigma_scaleds[il] );
+       amplitudes[il] = amplitudes[il] * ( local_rjs[il] + sqrt(2.0/pi)*atom_sigma_scaleds[il] );
+    }
+  }
+  else if( radial_enhancement == 2 ){
+    for(int il=0;il<local_nn;il++){
+      amplitudes_der[il] = amplitudes[il]*( 2.0*local_rjs[il] + 2.0*atom_sigma_scaleds[il]*atom_sigma_scaling + 
+                       sqrt(8.0/pi)*atom_sigma_scaleds[il] + sqrt(8.0/pi)*local_rjs[il]*atom_sigma_scaling ) + 
+                       amplitudes_der[il]*( local_rjs[il]*local_rjs[il] + s2s[il] + sqrt(8.0/pi)*atom_sigma_scaleds[il]*local_rjs[il] );
+      amplitudes[il] = amplitudes[il] * ( local_rjs[il]*local_rjs[il]+ s2s[il] + sqrt(8.0/pi)*atom_sigma_scaleds[il]*local_rjs[il] );
+    }
+  }
+  if( !do_central ){ 
+    if( nn > 0 && tid==0 ){
+      if( local_rjs_idx[0] == k ){
+        amplitudes[0] = 0.0;
+      }
+    }
+  }
+
+
   for(int il=0;il<local_nn;il++){
     lim_buffer_array[il+0*LOCAL_NN] = (rcut_soft > local_rjs[il] - atom_widths[il])? rcut_soft : local_rjs[il] - atom_widths[il]; // lower limit left
     lim_buffer_array[il+1*LOCAL_NN] = (local_rjs[il] > rcut_soft) ? local_rjs[il]  : rcut_soft; // upper limit left / lower limit right
