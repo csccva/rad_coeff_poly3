@@ -677,7 +677,7 @@ module soap_turbo_radial_op
 implicit none
 
 integer, intent(in) :: alpha_max, n_neigh(:), n_sites, radial_enhancement
-real*8, intent(in) :: rcut_soft_in, rcut_hard_in, rjs_in(:), atom_sigma_in, atom_sigma_scaling
+real(c_double), intent(in) :: rcut_soft_in, rcut_hard_in, rjs_in(:), atom_sigma_in, atom_sigma_scaling
 real(c_double), intent(in) :: amplitude_scaling, central_weight
 real*8 :: rcut_soft, rcut_hard, atom_sigma, atom_sigma_scaled, amplitude
 logical, intent(in) :: mask(:), do_derivatives, do_central
@@ -1216,7 +1216,7 @@ do i = 1, n_sites
     ! global_amplitudes(1:nn,i)=amplitudes
     global_rjs_idx(1:nn,i)=rjs_idx(1:nn)
     
-    global_rjs(1:nn, i)=rjs(1:nn)
+    !global_rjs(1:nn, i)=rjs(1:nn)
     ! global_atom_widths(1:nn,i)=atom_widths(1:nn) 
 
     call get_constant_poly_filter_coeff_array(rjs, atom_widths, rcut_soft, filter_width, 'left', B)
@@ -1399,7 +1399,7 @@ call cpy_htod(c_loc( global_nn), global_nn_d, st_g_nn, gpu_stream)
 
 
 n_rjs_in=size(rjs_in,1)
-st_rjs_in=n_rjs_in*sizeof(rjs_in(1))
+st_rjs_in=n_rjs_in*c_double
 call gpu_malloc_all(rjs_in_d, st_rjs_in, gpu_stream)
 call cpy_htod(c_loc(rjs_in), rjs_in_d, st_rjs_in, gpu_stream)
 !stop

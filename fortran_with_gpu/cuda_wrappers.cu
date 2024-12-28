@@ -3114,25 +3114,7 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
     for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
       exp_coeff[i_alph+k2*ALPHA_MAX]+=amplitudes[il]*exp_coeff_buffer_array[il+i_alph*LOCAL_NN];
     }
-  }
-  // // Deallocate memory
-  // delete[] local_rjs;
-  // delete[] local_rjs_idx;    
-  // delete[] atom_sigma_scaleds;
-  // delete[] s2s;
-  // delete[] atom_widths;
-  // delete[] lim_buffer_array;
-  // delete[] I0_array;
-  // delete[] g_aux_left_array;
-  // delete[] g_aux_right_array;
-  // delete[] M_left_array;
-  // delete[] M_right_array;
-  // delete[] I_left_array;
-  // delete[] I_right_array;
-  // delete[] exp_coeff_buffer_array;
-  // delete[] amplitudes;
-  // delete[] amplitudes_der;
-  // delete[] B;
+}
 }
 
 
@@ -3157,7 +3139,7 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   int k=k_i[i];
   int n_neighbors = n_neigh[i];  // Number of neighbors to process
   double pi=acos(-1.0);
-
+  int cpu_nn=global_nn[i];
   // Initialize local count for this thread
   
   // Initialize local count for this thread
@@ -3202,32 +3184,34 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
     local_nn=nn/WARP_SIZE;
   }
 
-  // if(nn<WARP_SIZE){
-  //   local_nn=0;
-  //   if(tid<nn){
-  //     local_nn=1;
-  //   }
-  // }
-  // if(nn>=WARP_SIZE && nn<2*WARP_SIZE){
-  //   local_nn=1;
-  //   if(tid<nn%WARP_SIZE){
-  //     local_nn=2;
-  //   }
-  // }
+  if(nn!=cpu_nn || nn>n_neighbors ){
+    printf("WTF?\n");
+  }
 
 
   if(local_nn>0){
       
-    int local_rjs_idx[LOCAL_NN];
+  int local_rjs_idx[LOCAL_NN];
   double local_rjs[LOCAL_NN];
   double atom_widths[LOCAL_NN];
-  
+  // if(tid==0 && i==0){
+  //   for(int ttt=0;ttt<n_neighbors;ttt++){
+  //     printf("j %d rjs_in %lf \n", ttt, rjs_in[k+ttt]/rcut_hard_in);
+  //   }
+  //   printf("\n");
+  // }
+
   int i_t=tid;
   for(int il=0;il<local_nn;il++){
     if(i_t<nn){
+      // int idx=global_rjs_idx[i_t+max_nn*i];
+      // if(idx<=2 || n_neighbors< idx-k){
+      //   printf("Lolo site %d tid %d i_t %d gpu nn %d n_neighbors %d idx-k %d idx %d k %d \n g_rjs %lf rjs_in %lf", i, tid, i_t, nn, n_neighbors, idx-k, idx,k, global_rjs[i_t+max_nn*i],rjs_in[idx+1] );
+      // }
+      
       local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
+      //local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
       //amplitudes[il]=global_amplitudes[i_t+max_nn*i];
-      local_rjs[il]=global_rjs[i_t+max_nn*i];
       //atom_widths[il]=global_atom_widths[i_t+max_nn*i];
       for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
         //I_left_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
@@ -3253,7 +3237,11 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
     }
     i_t+=WARP_SIZE;
   }
-
+    
+    for(int il=0;il<local_nn;il++){
+      int idx=local_rjs_idx[il]-1;
+      local_rjs[il]=rjs_in[idx]/rcut_hard_in;
+    }
     double amplitudes[LOCAL_NN];
   double amplitudes_der[LOCAL_NN];
   double exp_coeff_buffer_array[LOCAL_NN*ALPHA_MAX];
