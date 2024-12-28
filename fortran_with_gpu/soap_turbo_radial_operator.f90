@@ -1214,7 +1214,7 @@ do i = 1, n_sites
     I0_array = M_radial_poly_array(lim_buffer_array, max(7, alpha_max + 4), rcut_hard)
 
     ! global_amplitudes(1:nn,i)=amplitudes
-    global_rjs_idx(1:nn,i)=rjs_idx(1:nn)
+    ! global_rjs_idx(1:nn,i)=rjs_idx(1:nn)
     
     !global_rjs(1:nn, i)=rjs(1:nn)
     ! global_atom_widths(1:nn,i)=atom_widths(1:nn) 
