@@ -3163,8 +3163,8 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
 
     // Increment local count if condition is true
     if (condition) {
-      local_rjs_idx[local_nn]=idx+1;
-      local_rjs[local_nn]=rjs_in[idx]/rcut_hard_in;
+      // local_rjs_idx[local_nn]=idx+1;
+      // local_rjs[local_nn]=rjs_in[idx]/rcut_hard_in;
       local_nn++;
     }
 
@@ -3180,13 +3180,14 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   if(nn>LOCAL_NN*WARP_SIZE){
     printf(" \n Alert!!!! Alert!!! \n nn is bigger than LOCAL_NN*WARP_SIZE, LOCAL_NN! \n nn %d thread %d site %d\n", nn, (int)tid, i+1);
   }
-  // redefine local_nn
-  // if(tid<nn%WARP_SIZE){
-  //   local_nn=(nn+WARP_SIZE-1)/WARP_SIZE;
-  // }
-  // else{
-  //   local_nn=nn/WARP_SIZE;
-  // }
+  
+  //redefine local_nn
+  if(tid<nn%WARP_SIZE){
+    local_nn=(nn+WARP_SIZE-1)/WARP_SIZE;
+  }
+  else{
+    local_nn=nn/WARP_SIZE;
+  }
 
   if(nn!=cpu_nn || nn>n_neighbors ){
     printf("WTF?\n");
@@ -3206,13 +3207,10 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   int i_t=tid;
   for(int il=0;il<local_nn;il++){
     if(i_t<nn){
-      // int idx=global_rjs_idx[i_t+max_nn*i];
-      // if(idx<=2 || n_neighbors< idx-k){
-      //   printf("Lolo site %d tid %d i_t %d gpu nn %d n_neighbors %d idx-k %d idx %d k %d \n g_rjs %lf rjs_in %lf", i, tid, i_t, nn, n_neighbors, idx-k, idx,k, global_rjs[i_t+max_nn*i],rjs_in[idx+1] );
-      // }
+      int idx=global_rjs_idx[i_t+max_nn*i];
       
-      //local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
-      //local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
+      local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
+      local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
       //amplitudes[il]=global_amplitudes[i_t+max_nn*i];
       //atom_widths[il]=global_atom_widths[i_t+max_nn*i];
       for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
