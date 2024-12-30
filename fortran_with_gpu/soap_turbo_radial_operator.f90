@@ -723,7 +723,7 @@ logical(c_bool) :: c_do_derivatives,c_do_central
 type(c_ptr) :: cublas_handle, gpu_stream, mask_d, A_d
 logical(c_bool), allocatable, target :: new_mask(:)
 integer :: rank, max_nn
-integer(c_size_t) :: st_g_I_l,st_g_I_r,st_g_a, st_g_rjs_idx,st_g_nn !,st_g_e_b
+integer(c_size_t) :: st_g_I_l,st_g_I_r,st_g_a, st_g_rjs_idx,st_g_nn,st_g_e_b
 type(c_ptr) :: global_amplitudes_d, global_exp_buffer_d
 type(c_ptr) :: global_I_left_array_d, global_I_right_array_d
 type(c_ptr) :: global_rjs_idx_d, global_nn_d
@@ -733,7 +733,7 @@ type(c_ptr) :: global_lim_buffer_array_d, global_M_rad_mono_d
 type(c_ptr) :: global_atom_widths_d, global_rjs_d
 real(c_double), allocatable :: global_I_left_array(:,:,:)
 real(c_double), allocatable :: global_I_right_array(:,:,:)
-! real(c_double), allocatable :: global_exp_buffer(:,:,:)
+real(c_double), allocatable :: global_exp_buffer(:,:,:)
 real(c_double), allocatable :: global_amplitudes(:,:)
 integer(c_int), allocatable :: global_rjs_idx(:,:),global_nn(:)
 real(c_double), allocatable :: global_I0_array(:,:,:,:)
@@ -753,7 +753,7 @@ allocate(global_amplitudes(1:max_nn,1:n_sites))
 allocate( global_rjs_idx(1:max_nn,1:n_sites))
 allocate( global_nn(1:n_sites))
 
-! allocate(global_exp_buffer(1:max_nn,1:alpha_max,1:n_sites))
+allocate(global_exp_buffer(1:max_nn,1:alpha_max,1:n_sites))
 
 allocate(global_I0_array(1:max_nn, 1:max(7, alpha_max + 4), 1:3, 1:n_sites))
 allocate(global_M_left_array(1:max_nn, 1:alpha_max, 1:2, 1:n_sites))
@@ -1280,6 +1280,9 @@ do i = 1, n_sites
     if( do_derivatives )then      
       call get_constant_poly_filter_coeff_der_array(rjs, atom_widths, atom_width_scaling, rcut_soft, &
                                                     filter_width, 'left', B_der)
+    do k2=1,7
+      global_B_left(1:nn,k2,i)=B_der(k2,1:nn)
+    enddo
       !         We should try to figure out a more "vectorized way" of doing this
       do k2 = 1, nn
         M_left_der_array(k2, 1:7, 1) = I0_array(k2, 1:7, 1) * &
@@ -1294,6 +1297,9 @@ do i = 1, n_sites
 
       call get_constant_poly_filter_coeff_der_array(rjs, atom_widths, atom_width_scaling, rcut_soft, &
                                filter_width, 'right', B_der)
+    do k2=1,7
+      global_B_right(1:nn,k2,i)=B_der(k2,1:nn)
+    enddo
       !         We should try to figure out a more "vectorized way" of doing this
       do k2 = 1, nn
         M_right_der_array(k2, 1:7, 2) = I0_array(k2, 1:7, 2) * &
@@ -1306,14 +1312,19 @@ do i = 1, n_sites
                                        matmul( M_right_der_array(1:nn, 1:7, 2), transpose(A(1:alpha_max, 1:7)) ) * &
                                        I0_array(1:nn, 5:alpha_max + 4, 2)
 
+      
       exp_coeff_buffer_der_array = I_left_der_array + I_right_der_array
-
-      do j = 1, nn
-        k2 = rjs_idx(j)
-        exp_coeff_der(1:alpha_max, k2) = exp_coeff_der(1:alpha_max, k2) + &
-                                   amplitudes(j) * exp_coeff_buffer_der_array(j, 1:alpha_max) + &
-                                   amplitudes_der(j) * exp_coeff_buffer_array(j, 1:alpha_max)
-      end do
+      ! global_M_left_array (1:nn, 1:alpha_max, 1:2,i) =M_left_der_array (1:nn, 1:alpha_max, 1:2) 
+      ! global_M_right_array(1:nn, 1:alpha_max, 1:2,i) =M_right_der_array(1:nn, 1:alpha_max, 2:3) 
+      ! global_I_left_array(1:nn,1:alpha_max,i)=I_left_der_array
+      ! global_I_right_array(1:nn,1:alpha_max,i)=I_right_der_array
+      !global_exp_buffer(1:nn,1:alpha_max,i)=exp_coeff_buffer_der_array
+      ! do j = 1, nn
+      !   k2 = rjs_idx(j)
+      !   exp_coeff_der(1:alpha_max, k2) = exp_coeff_der(1:alpha_max, k2) + &
+      !                              amplitudes(j) * exp_coeff_buffer_der_array(j, 1:alpha_max) + &
+      !                              amplitudes_der(j) * exp_coeff_buffer_array(j, 1:alpha_max)
+      ! end do
       deallocate( M_left_der_array, M_right_der_array, I_left_der_array, I_right_der_array, &
                   exp_coeff_buffer_der_array, B_der )
     end if
@@ -1375,7 +1386,7 @@ call cpy_htod(c_loc(global_M_right_array),global_M_right_array_d,st_g_M_r_a,gpu_
 
 st_g_I_l=max_nn*alpha_max*n_sites*c_double
 st_g_I_r=max_nn*alpha_max*n_sites*c_double
-! st_g_e_b=max_nn*alpha_max*n_sites*c_double
+st_g_e_b=max_nn*alpha_max*n_sites*c_double
 
 st_g_a=max_nn*n_sites*c_double
 st_g_rjs_idx=max_nn*n_sites*c_int
@@ -1383,15 +1394,15 @@ st_g_nn=n_sites*c_int
 
 call gpu_malloc_all(global_I_left_array_d,st_g_I_l, gpu_stream)
 call gpu_malloc_all(global_I_right_array_d,st_g_I_r, gpu_stream)
-! call gpu_malloc_all(global_exp_buffer_d, st_g_e_b, gpu_stream)
+call gpu_malloc_all(global_exp_buffer_d, st_g_e_b, gpu_stream)
 
 call gpu_malloc_all(global_amplitudes_d,st_g_a, gpu_stream)
 call gpu_malloc_all(global_rjs_idx_d, st_g_rjs_idx, gpu_stream)
 call gpu_malloc_all(global_nn_d, st_g_nn, gpu_stream)
 
 call cpy_htod(c_loc(global_I_left_array), global_I_left_array_d,st_g_I_l, gpu_stream)
- call cpy_htod(c_loc(global_I_right_array), global_I_right_array_d,st_g_I_r, gpu_stream)
-! call cpy_htod(c_loc(global_exp_buffer), global_exp_buffer_d,st_g_e_b, gpu_stream)'
+call cpy_htod(c_loc(global_I_right_array), global_I_right_array_d,st_g_I_r, gpu_stream)
+call cpy_htod(c_loc(global_exp_buffer), global_exp_buffer_d,st_g_e_b, gpu_stream)
 
 call cpy_htod(c_loc(global_amplitudes), global_amplitudes_d,st_g_a, gpu_stream)
 call cpy_htod(c_loc( global_rjs_idx), global_rjs_idx_d, st_g_rjs_idx, gpu_stream)
