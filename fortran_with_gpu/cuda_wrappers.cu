@@ -2931,6 +2931,7 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
                          double *global_I0_array, double *global_M_left_array, double *global_M_right_array,
                          double *global_lim_buffer_array, double *global_B_right, double *global_B_left, double *global_M_rad_mono,
                          double *global_rjs, double *global_atom_widths,
+                         double *global_g_aux_left_array, double *global_g_aux_right_array,
                          int radial_enhancement) {
   int tid = threadIdx.x;  // Thread ID within block (same as lane in this case)
   int i=blockIdx.x;
@@ -2950,6 +2951,7 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   double lim_buffer_array[LOCAL_NN*3];
   double atom_widths[LOCAL_NN];
   double atom_width_scaling;
+  double vect[4] = {-1.0, -1.0, -2.0, -6.0};
 
   // Initialize local count for this thread
   int local_nn = 0;
@@ -3015,6 +3017,8 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
     double M_rad_mono[LOCAL_NN*7*7*3];
     double B_r[LOCAL_NN*7];
     double B_l[LOCAL_NN*7];
+    double g_aux_left_array[LOCAL_NN*ALPHA_MAX*2];
+    double g_aux_right_array[LOCAL_NN*ALPHA_MAX*2];
 
     int i_t=tid;
     for(int il=0;il<local_nn;il++){
@@ -3028,11 +3032,15 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
           //I_left_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
           //I_right_array[il+i_alph*LOCAL_NN] = global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
           //exp_coeff_buffer_array[il+i_alph*LOCAL_NN]=global_exp_buffer[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
-          M_left_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-          M_left_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-          M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-          M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+          //M_left_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+          //M_left_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+          //M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+          //M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
         
+          g_aux_left_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+          g_aux_left_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+          g_aux_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+          g_aux_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
           // lim_buffer_array[il+0*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
           // lim_buffer_array[il+1*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
           // lim_buffer_array[il+2*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
@@ -3061,6 +3069,16 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
       }
       i_t+=WARP_SIZE;
     }
+
+    for(int il=0;il<local_nn; il++){
+      for(int i_alph=0;i_alph<4;i_alph++){
+        M_left_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(0*a_max+i_alph)]*g_aux_left_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]*vect[i_alph];
+        M_left_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(1*a_max+i_alph)]*g_aux_left_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]*vect[i_alph];
+        M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(1*a_max+i_alph)]*g_aux_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]*vect[i_alph];
+        M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(2*a_max+i_alph)]*g_aux_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]*vect[i_alph];
+      }
+    }
+
     for(int il=0;il<local_nn; il++){
       for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
         double temp1 = 0.0;
@@ -3612,6 +3630,7 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                      double *global_I0_array_d, double *global_M_left_array_d, double *global_M_right_array_d, 
                      double *global_lim_buffer_array_d, double *global_B_right_d, double *global_B_left_d, double *global_M_rad_mono_d,
                      double *global_rjs_d, double *global_atom_widths_d,
+                     double *global_g_aux_left_array_d, double *global_g_aux_right_array_d,
                      hipStream_t *stream){
                     
   int warp_size;
@@ -3639,6 +3658,7 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                                             global_I0_array_d, global_M_left_array_d, global_M_right_array_d,
                                             global_lim_buffer_array_d, global_B_right_d, global_B_left_d, global_M_rad_mono_d,
                                             global_rjs_d, global_atom_widths_d,
+                                            global_g_aux_left_array_d, global_g_aux_right_array_d,
                                             radial_enhancement);
 
   cuda_buffer_newnew<<<n_sites, warp_size>>>(exp_coeff_d, exp_coeff_der_d,

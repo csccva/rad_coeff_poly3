@@ -738,11 +738,13 @@ real(c_double), allocatable :: global_amplitudes(:,:)
 integer(c_int), allocatable :: global_rjs_idx(:,:),global_nn(:)
 real(c_double), allocatable :: global_I0_array(:,:,:,:)
 real(c_double), allocatable :: global_M_left_array(:,:,:,:),global_M_right_array(:,:,:,:)
-integer(c_size_t) :: st_g_rjs, st_g_a_w
+integer(c_size_t) :: st_g_rjs, st_g_a_w,st_g_g_aux_a
 integer(c_size_t) :: st_g_I0_a, st_g_M_l_a, st_g_M_r_a,st_g_lim_b,st_g_B,st_g_M_rad_m
 real(c_double), allocatable :: global_M_rad_mono(:,:,:,:,:)
 real(c_double), allocatable :: global_lim_buffer_array(:,:,:),global_B_right(:,:,:),global_B_left(:,:,:)
 real(c_double), allocatable :: global_atom_widths(:,:),global_rjs(:,:)
+real(c_double), allocatable :: global_g_aux_left_array(:,:,:,:),global_g_aux_right_array(:,:,:,:)
+type(c_ptr) :: global_g_aux_left_array_d,global_g_aux_right_array_d
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 rank=0
 max_nn=100
@@ -765,6 +767,8 @@ allocate(global_M_rad_mono(1:max_nn,1:7,1:7,1:3,1:n_sites))
 
 allocate(global_atom_widths(1:max_nn,n_sites))
 allocate(global_rjs(1:max_nn,n_sites))
+allocate(global_g_aux_left_array (1:max_nn,1:alpha_max,1:2,1:n_sites))
+allocate(global_g_aux_right_array(1:max_nn,1:alpha_max,1:2,1:n_sites))
 
 num_scaling_mode=-100000
 
@@ -867,6 +871,8 @@ do i = 1, n_sites
   allocate( I0_array(1:nn, 1:alpha_max + 4, 1:3) )
   allocate( g_aux_left_array(1:nn, 1:alpha_max, 1:2) )
   allocate( g_aux_right_array(1:nn, 1:alpha_max, 2:3) ) ! note the 2:3 bounds here
+  g_aux_left_array = 0.d0
+  g_aux_right_array= 0.d0
   allocate( M_left_array(1:nn, 1:alpha_max, 1:2) )
   allocate( M_right_array(1:nn, 1:alpha_max, 2:3) ) ! note the 2:3 bounds here
   M_left_array(1:nn, 1:alpha_max, 1:2)=0.d0
@@ -1009,8 +1015,10 @@ do i = 1, n_sites
   global_atom_widths(1:nn,i)=atom_widths(1:nn) 
 
   global_I0_array(1:nn, 1:alpha_max + 4, 1:3,i)=I0_array(1:nn, 1:alpha_max + 4, 1:3)
-  global_M_left_array (1:nn, 1:alpha_max, 1:2,i) = M_left_array (1:nn, 1:alpha_max, 1:2) 
-  global_M_right_array(1:nn, 1:alpha_max, 1:2,i) = M_right_array(1:nn, 1:alpha_max, 2:3)
+  global_g_aux_left_array (1:nn, 1:alpha_max,1:2,i)=g_aux_left_array (1:nn, 1:alpha_max, 1:2)
+  global_g_aux_right_array(1:nn, 1:alpha_max,1:2,i)=g_aux_right_array(1:nn, 1:alpha_max, 2:3)
+  ! global_M_left_array (1:nn, 1:alpha_max, 1:2,i) = M_left_array (1:nn, 1:alpha_max, 1:2) 
+  ! global_M_right_array(1:nn, 1:alpha_max, 1:2,i) = M_right_array(1:nn, 1:alpha_max, 2:3)
   
   !global_I_left_array(1:nn,1:alpha_max,i) =I_left_array
   !global_I_right_array(1:nn,1:alpha_max,i)=I_right_array
@@ -1366,6 +1374,11 @@ if( scaling_mode == "polynomial" )then
   num_scaling_mode=1000
 endif
 
+st_g_g_aux_a=max_nn*alpha_max*2*n_sites*c_double
+call gpu_malloc_all(global_g_aux_left_array_d,  st_g_g_aux_a,gpu_stream)
+call gpu_malloc_all(global_g_aux_right_array_d, st_g_g_aux_a,gpu_stream)
+call cpy_htod(c_loc(global_g_aux_left_array), global_g_aux_left_array_d,  st_g_g_aux_a,gpu_stream)
+call cpy_htod(c_loc(global_g_aux_right_array),global_g_aux_right_array_d, st_g_g_aux_a,gpu_stream)
 
 st_g_rjs=max_nn*n_sites*c_double 
 st_g_a_w=max_nn*n_sites*c_double 
@@ -1487,6 +1500,7 @@ call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, &
                 global_I0_array_d, global_M_left_array_d, global_M_right_array_d, &
                 global_lim_buffer_array_d, global_B_right_d, global_B_left_d, global_M_rad_mono_d, &
                 global_rjs_d, global_atom_widths_d, &
+                global_g_aux_left_array_d, global_g_aux_right_array_d, &
                 gpu_stream) 
 
 call  cpy_dtoh(exp_coeff_d,c_loc(exp_coeff),st_size_exp_coeff,gpu_stream)
