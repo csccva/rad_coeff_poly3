@@ -2667,24 +2667,6 @@ void M_radial_poly(double *I0_array, double *lim_buffer_array, int a_max, int lo
 }
 
 __device__ 
-void g_aux(double r, double r0, double width, int piece, double *poly) {
-  double x = (r - r0) / width;
-  if (piece == -1) { // piece -1 is left
-    poly[0] = 1.0 - 3.0 * x * x - 2.0 * x * x * x;
-    poly[1] = -6.0 * (x * x + x) / width;
-    poly[2] = -3.0 * (2.0 * x +1) / (width * width);
-    poly[3] = -2.0 / (width * width * width);
-  }
-  else if (piece == 1) { // piece 1 is right
-    poly[0] = 1.0 - 3.0 * x * x + 2.0 * x * x * x;
-    poly[1] =  6.0 * (x * x - x) / width;
-    poly[2] = 3.0 * (2.0 * x - 1) / (width * width);
-    poly[3] =  2.0 / (width * width * width);
-  }
-}
-
-
-__device__ 
 void g_aux_array_one(double *r, double *r0, double *width, int piece, double *poly, double r0fact, int size_r0) {
     
   for (int il = 0; il < size_r0; il++) {
@@ -2706,29 +2688,101 @@ void g_aux_array_one(double *r, double *r0, double *width, int piece, double *po
 }
 
 
+
 __device__ 
-void g_aux_der_array_one(double *r, double *r0, double *width, int piece, double *poly, double r0fact, int size_r0) {
+void g_aux(double r, double r0, double width, int piece, double *poly) {
+  double x = (r - r0) / width;
+  if (piece == -1) { // piece -1 is left
+    poly[0] = 1.0 - 3.0 * x * x - 2.0 * x * x * x;
+    poly[1] = -6.0 * (x * x + x) / width;
+    poly[2] = -3.0 * (2.0 * x +1) / (width * width);
+    poly[3] = -2.0 / (width * width * width);
+  }
+  else if (piece == 1) { // piece 1 is right
+    poly[0] = 1.0 - 3.0 * x * x + 2.0 * x * x * x;
+    poly[1] =  6.0 * (x * x - x) / width;
+    poly[2] = 3.0 * (2.0 * x - 1) / (width * width);
+    poly[3] =  2.0 / (width * width * width);
+  }
+}
+
+__device__ 
+void g_aux_der_array_one(double *r, double *r0, double *width, double width_scaling, 
+                         int piece, double *poly, double r0fact, int size_r0) {
     
   for (int il = 0; il < size_r0; il++) {
     double x = (r[il] - r0fact*r0[il]) / width[il];
     if (piece == -1) { // piece -1 is left
-      poly[0*LOCAL_NN+il] = 1.0 - 3.0 * x * x - 2.0 * x * x * x;
-      poly[1*LOCAL_NN+il] = -6.0 * (x * x + x) / width[il];
-      poly[2*LOCAL_NN+il] = -3.0 * (2.0 * x + 1) / (width[il] * width[il]);
-      poly[3*LOCAL_NN+il] = -2.0 / (width[il] * width[il] * width[il]);
+      poly[0*LOCAL_NN+il] = 6.0*(x + (width_scaling + 1.0)*x*x + width_scaling*x*x*x)/width[il];
+      poly[1*LOCAL_NN+il] = 6.0*(1.0 + 2.0*(width_scaling + 1.0)*x + 3.0*width_scaling*x*x)/(width[il] * width[il]);
+      poly[2*LOCAL_NN+il] = 6.0*(width_scaling + 1.0 + 3.0*width_scaling*x)/ (width[il] * width[il]* width[il]);
+      poly[3*LOCAL_NN+il] = 6.0*width_scaling/ (width[il] * width[il] * width[il]* width[il]);
     }
     else if (piece == 1) { // piece 1 is right
       
-      poly[0*LOCAL_NN+il] = 1.0 - 3.0 * x * x + 2.0 * x * x * x;
-      poly[1*LOCAL_NN+il] =  6.0 * (x * x - x) / width[il];
-      poly[2*LOCAL_NN+il] =  3.0 * (2.0 * x - 1) / (width[il] * width[il]);
-      poly[3*LOCAL_NN+il] =  2.0 / (width[il] * width[il] * width[il]);
+      poly[0*LOCAL_NN+il] =  6.0*(x + (width_scaling - 1.0)*x*x - width_scaling*x*x*x)/width[il];
+      poly[1*LOCAL_NN+il] =  6.0*(1.0 + 2.0*(width_scaling - 1.0)*x - 3.0*width_scaling*x*x)/(width[il] * width[il]);
+      poly[2*LOCAL_NN+il] =  6.0*(width_scaling - 1.0 - 3.0*width_scaling*x)/ (width[il] * width[il]* width[il]);
+      poly[3*LOCAL_NN+il] = -6.0*width_scaling/ (width[il] * width[il] * width[il] * width[il]);
     }
   }
 }
+
+
+
+
+
+__device__
+void get_constant_poly_filter_coeff_der_array(double *rj,double *width_j, double width_scaling,double r_filter, 
+                                              double filter_width, int piece, double *B, int rj_size){
+  double C_filter[4];
+  double rj_temp[LOCAL_NN];
+  double C_poly[4*LOCAL_NN*7]; 
+  double col_poly[LOCAL_NN*4];
+
+  //coeff. from the filter
+  g_aux(0.0,r_filter,filter_width,1, C_filter);
+
+  //build Toeplitz matrix a.k.a. diagonal-constant matrix
+  for (int il = 0; il < 7*LOCAL_NN; il++) {
+    C_poly[0*7*LOCAL_NN+il]=0.0;
+    C_poly[1*7*LOCAL_NN+il]=0.0;
+    C_poly[2*7*LOCAL_NN+il]=0.0;
+    C_poly[3*7*LOCAL_NN+il]=0.0;
+  }
+  for (int il = 0; il < rj_size; il++) {
+    rj_temp[il]=-rj[il];
+  } 
+
+  g_aux_der_array_one(rj_temp, rj, width_j, width_scaling, piece, col_poly, 0.0, rj_size);
+  for(int il=0;il<rj_size;il++){
+    int i_k=(il)*7;
+    C_poly[0*7*LOCAL_NN+i_k+0+0]=col_poly[LOCAL_NN*0+il];
+    C_poly[0*7*LOCAL_NN+i_k+1+0]=col_poly[LOCAL_NN*1+il];
+    C_poly[0*7*LOCAL_NN+i_k+2+0]=col_poly[LOCAL_NN*2+il];
+    C_poly[0*7*LOCAL_NN+i_k+3+0]=col_poly[LOCAL_NN*3+il];
+    C_poly[1*7*LOCAL_NN+i_k+0+1]=col_poly[LOCAL_NN*0+il];
+    C_poly[1*7*LOCAL_NN+i_k+1+1]=col_poly[LOCAL_NN*1+il];
+    C_poly[1*7*LOCAL_NN+i_k+2+1]=col_poly[LOCAL_NN*2+il];
+    C_poly[1*7*LOCAL_NN+i_k+3+1]=col_poly[LOCAL_NN*3+il];
+    C_poly[2*7*LOCAL_NN+i_k+0+2]=col_poly[LOCAL_NN*0+il];
+    C_poly[2*7*LOCAL_NN+i_k+1+2]=col_poly[LOCAL_NN*1+il];
+    C_poly[2*7*LOCAL_NN+i_k+2+2]=col_poly[LOCAL_NN*2+il];
+    C_poly[2*7*LOCAL_NN+i_k+3+2]=col_poly[LOCAL_NN*3+il];
+    C_poly[3*7*LOCAL_NN+i_k+0+3]=col_poly[LOCAL_NN*0+il];
+    C_poly[3*7*LOCAL_NN+i_k+1+3]=col_poly[LOCAL_NN*1+il];
+    C_poly[3*7*LOCAL_NN+i_k+2+3]=col_poly[LOCAL_NN*2+il];
+    C_poly[3*7*LOCAL_NN+i_k+3+3]=col_poly[LOCAL_NN*3+il];
+  }
+  for(int il=0;il<7*LOCAL_NN;il++){
+    B[il]=C_poly[0*7*LOCAL_NN+il]*C_filter[0]+C_poly[1*7*LOCAL_NN+il]*C_filter[1]
+         +C_poly[2*7*LOCAL_NN+il]*C_filter[2]+C_poly[3*7*LOCAL_NN+il]*C_filter[3];
+  }
+}
+
 __device__
 void get_constant_poly_filter_coeff_array(double *rj,double *width_j,double r_filter, double filter_width, 
-                                          int piece, double *B, int rj_size, int atom_widths_size){
+                                          int piece, double *B, int rj_size){
   double C_filter[4];
   double rj_temp[LOCAL_NN];
   double C_poly[4*LOCAL_NN*7]; 
@@ -2773,57 +2827,6 @@ void get_constant_poly_filter_coeff_array(double *rj,double *width_j,double r_fi
          +C_poly[2*7*LOCAL_NN+il]*C_filter[2]+C_poly[3*7*LOCAL_NN+il]*C_filter[3];
   }
 }
-
-
-
-__device__
-void get_constant_poly_filter_coeff_der_array(double *rj,double *width_j,double r_filter, double filter_width, 
-                                          int piece, double *B, int rj_size, int atom_widths_size){
-  double C_filter[4];
-  double rj_temp[LOCAL_NN];
-  double C_poly[4*LOCAL_NN*7]; 
-  double col_poly[LOCAL_NN*4];
-
-  //coeff. from the filter
-  g_aux(0.0,r_filter,filter_width,1, C_filter);
-
-  //build Toeplitz matrix a.k.a. diagonal-constant matrix
-  for (int il = 0; il < 7*LOCAL_NN; il++) {
-    C_poly[0*7*LOCAL_NN+il]=0.0;
-    C_poly[1*7*LOCAL_NN+il]=0.0;
-    C_poly[2*7*LOCAL_NN+il]=0.0;
-    C_poly[3*7*LOCAL_NN+il]=0.0;
-  }
-  for (int il = 0; il < rj_size; il++) {
-    rj_temp[il]=-rj[il];
-  } 
-
-  g_aux_array_one(rj_temp, rj, width_j, piece, col_poly, 0.0, rj_size);
-  for(int il=0;il<rj_size;il++){
-    int i_k=(il)*7;
-    C_poly[0*7*LOCAL_NN+i_k+0+0]=col_poly[LOCAL_NN*0+il];
-    C_poly[0*7*LOCAL_NN+i_k+1+0]=col_poly[LOCAL_NN*1+il];
-    C_poly[0*7*LOCAL_NN+i_k+2+0]=col_poly[LOCAL_NN*2+il];
-    C_poly[0*7*LOCAL_NN+i_k+3+0]=col_poly[LOCAL_NN*3+il];
-    C_poly[1*7*LOCAL_NN+i_k+0+1]=col_poly[LOCAL_NN*0+il];
-    C_poly[1*7*LOCAL_NN+i_k+1+1]=col_poly[LOCAL_NN*1+il];
-    C_poly[1*7*LOCAL_NN+i_k+2+1]=col_poly[LOCAL_NN*2+il];
-    C_poly[1*7*LOCAL_NN+i_k+3+1]=col_poly[LOCAL_NN*3+il];
-    C_poly[2*7*LOCAL_NN+i_k+0+2]=col_poly[LOCAL_NN*0+il];
-    C_poly[2*7*LOCAL_NN+i_k+1+2]=col_poly[LOCAL_NN*1+il];
-    C_poly[2*7*LOCAL_NN+i_k+2+2]=col_poly[LOCAL_NN*2+il];
-    C_poly[2*7*LOCAL_NN+i_k+3+2]=col_poly[LOCAL_NN*3+il];
-    C_poly[3*7*LOCAL_NN+i_k+0+3]=col_poly[LOCAL_NN*0+il];
-    C_poly[3*7*LOCAL_NN+i_k+1+3]=col_poly[LOCAL_NN*1+il];
-    C_poly[3*7*LOCAL_NN+i_k+2+3]=col_poly[LOCAL_NN*2+il];
-    C_poly[3*7*LOCAL_NN+i_k+3+3]=col_poly[LOCAL_NN*3+il];
-  }
-  for(int il=0;il<7*LOCAL_NN;il++){
-    B[il]=C_poly[0*7*LOCAL_NN+il]*C_filter[0]+C_poly[1*7*LOCAL_NN+il]*C_filter[1]
-         +C_poly[2*7*LOCAL_NN+il]*C_filter[2]+C_poly[3*7*LOCAL_NN+il]*C_filter[3];
-  }
-}
-
 
 __device__
 void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
@@ -2912,284 +2915,10 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   M[6+7*6]=720.0;
 }
 
- __global__ 
- void cuda_buffer_region(double *exp_coeff,
-                         const double* rjs_in, const bool* mask, const double rcut_soft_in, 
-                         const double rcut_hard_in, const double atom_sigma_in, 
-                         const double atom_sigma_scaling, double atom_sigma, const int* n_neigh, 
-                         int *k_i, int alpha_max, 
-                         int scaling_mode, double amplitude_scaling, 
-                         double central_weight,  bool do_central,
-                         double rcut_soft, double rcut_hard, double filter_width,
-                         double *A,
-                         int radial_enhancement) {
-  int tid = threadIdx.x;  // Thread ID within block (same as lane in this case)
-  int i=blockIdx.x;
-  int k=k_i[i];
-  int n_neighbors = n_neigh[i];  // Number of neighbors to process
-  double pi=acos(-1.0);
-  // Initialize local count for this thread
-  int local_nn = 0;
-
-  // Constants for atom_widths computation
-  const double factor = 2.0 * sqrt(2.0 * log(2.0));
-
-  // Iterate through neighbors assigned to this thread
-  for (int j = tid; j < n_neighbors; j += WARP_SIZE) {
-    int idx = k +j;
-
-    // Compute atom_widths for the current neighbor
-    double atom_widths = factor * (atom_sigma_in + atom_sigma_scaling * rjs_in[idx]);
-
-    // Evaluate the conditions
-    bool condition = (rcut_soft_in < rcut_hard_in) && mask[idx] &&
-                         (rjs_in[idx] + atom_widths> rcut_soft_in);
-
-    // Increment local count if condition is true
-    if (condition) {
-      local_nn++;
-    }
-
-  }
-
-  int warp_nn= warp_red_int(local_nn);
-    // Broadcast the computed warp_nn to all threads in the warp
-    // HIP: Use __shfl
-    // CUDA Equivalent:
-    // int broadcasted_nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0);
-  int nn = __shfl(warp_nn, 0);
-    
-  if(nn>2*WARP_SIZE){
-    printf(" \n Alert!!!! Alert!!! \n nn is bigger than 2 times the warp increase LOCAL_NN! \n");
-  }
-  
-  // Static allocation
-  double local_rjs[LOCAL_NN];
-  int local_rjs_idx[LOCAL_NN];
-
-  int k2=0;
-  
-  // Iterate through neighbors assigned to this thread
-  for (int j = tid; j < n_neighbors; j += WARP_SIZE) {
-    int idx = k +j;
-
-    // Compute atom_widths for the current neighbor
-    double atom_widths = factor * (atom_sigma_in + atom_sigma_scaling * rjs_in[idx]);
-
-    // Evaluate the conditions
-    bool condition = (rcut_soft_in < rcut_hard_in) && mask[idx] &&
-                         (rjs_in[idx] + atom_widths> rcut_soft_in);
-
-    // Increment local count if condition is true
-    if (condition) {
-      local_rjs[k2]= rjs_in[k+j]/rcut_hard_in;
-      local_rjs_idx[k2] = k+j;
-      k2++;
-    }
-  }
-
-  double atom_sigma_scaleds[LOCAL_NN];
-  double s2s[LOCAL_NN];
-  double atom_widths[LOCAL_NN];
-  double lim_buffer_array[3 * LOCAL_NN];
-  double I0_array[3 * ((7 > ALPHA_MAX + 4) ? 7 : ALPHA_MAX + 4) * LOCAL_NN];
-  double g_aux_left_array[2 * ALPHA_MAX * LOCAL_NN];
-  double g_aux_right_array[2 * ALPHA_MAX * LOCAL_NN];
-  double M_left_array[2 * ALPHA_MAX * LOCAL_NN];
-  double M_right_array[2 * ALPHA_MAX * LOCAL_NN];
-  double I_left_array[ALPHA_MAX * LOCAL_NN];
-  double I_right_array[ALPHA_MAX * LOCAL_NN];
-  double exp_coeff_buffer_array[ALPHA_MAX * LOCAL_NN];
-  double amplitudes[LOCAL_NN];
-  double amplitudes_der[LOCAL_NN];
-  double B[LOCAL_NN * 7];
-
-  // if(c_do_derivatives){
-
-  // }
-  double local_atom_width_scaling = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaling;
-  for(int il=0;il<local_nn;il++){
-    atom_sigma_scaleds[il]=atom_sigma+atom_sigma_scaling*local_rjs[il];
-    s2s[il]=atom_sigma_scaleds[il]*atom_sigma_scaleds[il];
-    atom_widths[il] = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaleds[il];
-  }
-  double atom_width_scaling = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaling;
-  if( scaling_mode == 1000 ){
-    if( amplitude_scaling == 0.0 ){
-      for(int il=0;il<local_nn;il++){
-        amplitudes[il] = 1.0 / atom_sigma_scaleds[il];
-        amplitudes_der[il] = - atom_sigma_scaling / s2s[il];
-      }
-    }
-    else{
-      if( amplitude_scaling == 1.0 ) {
-        for(int il=0;il<local_nn;il++){
-          amplitudes[il] = 1.0 / atom_sigma_scaleds[il] * ( 1.0 + 2.0*local_rjs[il]*local_rjs[il]*local_rjs[il] - 3.0*local_rjs[il]*local_rjs[il] );
-          amplitudes_der[il] = 6.0 / atom_sigma_scaleds[il] * (local_rjs[il]*local_rjs[il] - local_rjs[il]) 
-                          - atom_sigma_scaling / atom_sigma_scaleds[il] * amplitudes[il];
-        }
-      }
-      else{
-        for(int il=0;il<local_nn;il++){
-          amplitudes[il] = pow((1.0 / atom_sigma_scaleds[il] * ( 1.0 + 2.0*local_rjs[il]*local_rjs[il]*local_rjs[il] - 3.0*local_rjs[il]*local_rjs[il] )),amplitude_scaling);
-          amplitudes_der[il] =pow( (6.0*amplitude_scaling / atom_sigma_scaleds[il] * (local_rjs[il]*local_rjs[il] - local_rjs[il]) 
-                       * ( 1.0 + 2.0*local_rjs[il]*local_rjs[il]*local_rjs[il] - 3.0*local_rjs[il]*local_rjs[il] )),(amplitude_scaling - 1.0))
-                       - atom_sigma_scaling / atom_sigma_scaleds[il] * amplitudes[il];
-        }
-      }
-    }
-  }
-  if(nn>0){
-    if(tid==0){
-      amplitudes[0]=central_weight*amplitudes[0];
-      amplitudes_der[0]=central_weight*amplitudes_der[0];
-    }
-  }
-  if( radial_enhancement == 1 ){
-    for(int il=0;il<local_nn;il++){
-      amplitudes_der[il] = amplitudes[il] * ( 1.0 + sqrt(2.0/pi)*atom_sigma_scaling ) + 
-                       amplitudes_der[il] * ( local_rjs[il] + sqrt(2.0/pi)*atom_sigma_scaleds[il] );
-       amplitudes[il] = amplitudes[il] * ( local_rjs[il] + sqrt(2.0/pi)*atom_sigma_scaleds[il] );
-    }
-  }
-  else if( radial_enhancement == 2 ){
-    for(int il=0;il<local_nn;il++){
-      amplitudes_der[il] = amplitudes[il]*( 2.0*local_rjs[il] + 2.0*atom_sigma_scaleds[il]*atom_sigma_scaling + 
-                       sqrt(8.0/pi)*atom_sigma_scaleds[il] + sqrt(8.0/pi)*local_rjs[il]*atom_sigma_scaling ) + 
-                       amplitudes_der[il]*( local_rjs[il]*local_rjs[il] + s2s[il] + sqrt(8.0/pi)*atom_sigma_scaleds[il]*local_rjs[il] );
-      amplitudes[il] = amplitudes[il] * ( local_rjs[il]*local_rjs[il]+ s2s[il] + sqrt(8.0/pi)*atom_sigma_scaleds[il]*local_rjs[il] );
-    }
-  }
-  if( !do_central ){ 
-    if( nn > 0 && tid==0 ){
-      if( local_rjs_idx[0] == k ){
-        amplitudes[0] = 0.0;
-      }
-    }
-  }  
-  //  !       Atoms within the buffer region
-  //   lim_buffer_array(:, 1) = max( rcut_soft, rjs - atom_widths ) ! lower limit left
-  //   lim_buffer_array(:, 2) = max( rjs, rcut_soft )               ! upper limit left / lower limit right
-  //   lim_buffer_array(:, 3) = min( rcut_hard, rjs + atom_widths ) ! upper limit right
-
-  for(int il=0;il<local_nn;il++){
-    lim_buffer_array[il * 3 + 0] = (rcut_soft > local_rjs[il] - atom_widths[il])? rcut_soft : local_rjs[il] - atom_widths[il]; // lower limit left
-    lim_buffer_array[il * 3 + 1] = (local_rjs[il] > rcut_soft) ? local_rjs[il]  : rcut_soft; // upper limit left / lower limit right
-    lim_buffer_array[il * 3 + 2] = (rcut_hard < local_rjs[il] + atom_widths[il]) ? rcut_hard : local_rjs[il] + atom_widths[il]; // upper limit right 
-  }
-      // double lim_buffer_array[3][LOCAL_NN];
-      //double I0_array[3][(7>alpha_max+4)?7:alpha_max+4][LOCAL_NN];
-      // I0_array = M_radial_poly_array(lim_buffer_array, max(7, alpha_max + 4), rcut_hard)
-  int a_max=(7>alpha_max+4)?7:alpha_max+4;
-  M_radial_poly(I0_array,lim_buffer_array,a_max,local_nn,rcut_hard);
-  int l_rjs_size=local_nn;
-  int atom_widths_size=local_nn;
-  int left=-1; int right=1;
-
-  get_constant_poly_filter_coeff_array(local_rjs,atom_widths,rcut_soft,filter_width, left, B,
-                                       l_rjs_size, atom_widths_size);
-  
-  double M_radial_monomial[7];
-  double radial_terms[7];
-  for(int il=0; il<local_nn; il++){
-    radial_terms[0]=1.0;
-    for(int i_p=1;i_p<7;i_p++){
-      radial_terms[i_p]=lim_buffer_array[0*LOCAL_NN+il]*radial_terms[i_p-1];
-    }
-    for(int i_M=0;i_M<7;i_M++){
-      get_M_radiam_monomial(6,M_radial_monomial,radial_terms,i_M);
-      M_left_array[il+(i_M+0*7)*LOCAL_NN]=-(B[0+7*il]*M_radial_monomial[0]+B[1+7*il]*M_radial_monomial[1]
-                                           +B[2+7*il]*M_radial_monomial[2]+B[3+7*il]*M_radial_monomial[3]
-                                           +B[4+7*il]*M_radial_monomial[4]+B[5+7*il]*M_radial_monomial[5]
-                                           +B[6+7*il]*M_radial_monomial[6])*I0_array[il+(i_M+0*7)*LOCAL_NN];
-    }
-
-    radial_terms[0]=1.0;
-    for(int i_p=1;i_p<7;i_p++){
-      radial_terms[i_p]=lim_buffer_array[1*LOCAL_NN+il]*radial_terms[i_p-1];
-    }
-    for(int i_M=0;i_M<7;i_M++){
-      get_M_radiam_monomial(6,M_radial_monomial,radial_terms,i_M);
-      M_left_array[il+(i_M+1*7)*LOCAL_NN]=-(B[0+7*il]*M_radial_monomial[0]+B[1+7*il]*M_radial_monomial[1]
-                                           +B[2+7*il]*M_radial_monomial[2]+B[3+7*il]*M_radial_monomial[3]
-                                           +B[4+7*il]*M_radial_monomial[4]+B[5+7*il]*M_radial_monomial[5]
-                                           +B[6+7*il]*M_radial_monomial[6])*I0_array[il+(i_M+1*7)*LOCAL_NN];
-    }
-
-    for(int il=0;il<local_nn; il++){
-      for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
-        I_left_array[il+i_alph*LOCAL_NN]=(M_left_array[il+LOCAL_NN*(1*7+0)]*A[i_alph+0*ALPHA_MAX]+M_left_array[il+LOCAL_NN*(1*7+1)]*A[i_alph+1*ALPHA_MAX]
-                                         +M_left_array[il+LOCAL_NN*(1*7+2)]*A[i_alph+2*ALPHA_MAX]+M_left_array[il+LOCAL_NN*(1*7+3)]*A[i_alph+3*ALPHA_MAX]
-                                         +M_left_array[il+LOCAL_NN*(1*7+4)]*A[i_alph+5*ALPHA_MAX]+M_left_array[il+LOCAL_NN*(1*7+5)]*A[i_alph+5*ALPHA_MAX]
-                                         +M_left_array[il+LOCAL_NN*(1*7+6)]*A[i_alph+6*ALPHA_MAX])*I0_array[il+(1*a_max+i_alph+4)]-
-                                         (M_left_array[il+LOCAL_NN*(0*7+0)]*A[i_alph+0*ALPHA_MAX]+M_left_array[il+LOCAL_NN*(0*7+1)]*A[i_alph+1*ALPHA_MAX]
-                                         +M_left_array[il+LOCAL_NN*(0*7+2)]*A[i_alph+2*ALPHA_MAX]+M_left_array[il+LOCAL_NN*(0*7+3)]*A[i_alph+3*ALPHA_MAX]
-                                         +M_left_array[il+LOCAL_NN*(0*7+4)]*A[i_alph+5*ALPHA_MAX]+M_left_array[il+LOCAL_NN*(0*7+5)]*A[i_alph+5*ALPHA_MAX]
-                                         +M_left_array[il+LOCAL_NN*(0*7+6)]*A[i_alph+6*ALPHA_MAX])*I0_array[il+(0*a_max+i_alph+4)];
-      }
-    }
-  }
-
-
-  get_constant_poly_filter_coeff_array(local_rjs,atom_widths,rcut_soft,filter_width, right, B,
-                                       l_rjs_size, atom_widths_size);
-  
-  for(int il=0; il<local_nn; il++){
-    radial_terms[0]=1.0;
-    for(int i_p=1;i_p<7;i_p++){
-      radial_terms[i_p]=lim_buffer_array[1*LOCAL_NN+il]*radial_terms[i_p-1];
-    }
-    for(int i_M=0;i_M<7;i_M++){
-      get_M_radiam_monomial(6,M_radial_monomial,radial_terms,i_M);
-      M_right_array[il+(i_M+0*7)*LOCAL_NN]=-(B[0+7*il]*M_radial_monomial[0]+B[1+7*il]*M_radial_monomial[1]
-                                            +B[2+7*il]*M_radial_monomial[2]+B[3+7*il]*M_radial_monomial[3]
-                                            +B[4+7*il]*M_radial_monomial[4]+B[5+7*il]*M_radial_monomial[5]
-                                            +B[6+7*il]*M_radial_monomial[6])*I0_array[il+(i_M+1*7)*LOCAL_NN];
-    }
-
-    radial_terms[0]=1.0;
-    for(int i_p=1;i_p<7;i_p++){
-      radial_terms[i_p]=lim_buffer_array[2*LOCAL_NN+il]*radial_terms[i_p-1];
-    }
-    for(int i_M=0;i_M<7;i_M++){
-      get_M_radiam_monomial(6,M_radial_monomial,radial_terms,i_M);
-      M_right_array[il+(i_M+1*7)*LOCAL_NN]=-(B[0+7*il]*M_radial_monomial[0]+B[1+7*il]*M_radial_monomial[1]
-                                            +B[2+7*il]*M_radial_monomial[2]+B[3+7*il]*M_radial_monomial[3]
-                                            +B[4+7*il]*M_radial_monomial[4]+B[5+7*il]*M_radial_monomial[5]
-                                            +B[6+7*il]*M_radial_monomial[6])*I0_array[il+(i_M+1*7)*LOCAL_NN];
-    }
-
-    for(int il=0;il<local_nn; il++){
-      for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
-        I_right_array[il+i_alph*LOCAL_NN]=(M_right_array[il+LOCAL_NN*(1*7+0)]*A[i_alph+0*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(1*7+1)]*A[i_alph+1*ALPHA_MAX]
-                                          +M_right_array[il+LOCAL_NN*(1*7+2)]*A[i_alph+2*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(1*7+3)]*A[i_alph+3*ALPHA_MAX]
-                                          +M_right_array[il+LOCAL_NN*(1*7+4)]*A[i_alph+5*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(1*7+5)]*A[i_alph+5*ALPHA_MAX]
-                                          +M_right_array[il+LOCAL_NN*(1*7+6)]*A[i_alph+6*ALPHA_MAX])*I0_array[il+(2*a_max+i_alph+4)]-
-                                          (M_right_array[il+LOCAL_NN*(0*7+0)]*A[i_alph+0*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(0*7+1)]*A[i_alph+1*ALPHA_MAX]
-                                          +M_right_array[il+LOCAL_NN*(0*7+2)]*A[i_alph+2*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(0*7+3)]*A[i_alph+3*ALPHA_MAX]
-                                          +M_right_array[il+LOCAL_NN*(0*7+4)]*A[i_alph+5*ALPHA_MAX]+M_right_array[il+LOCAL_NN*(0*7+5)]*A[i_alph+5*ALPHA_MAX]
-                                          +M_right_array[il+LOCAL_NN*(0*7+6)]*A[i_alph+6*ALPHA_MAX])*I0_array[il+(1*a_max+i_alph+4)];
-      }
-    }
-  }
-
-  for(int il=0;il<local_nn;il++){
-      for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
-        exp_coeff_buffer_array[il+i_alph*ALPHA_MAX]=I_left_array[il+i_alph*ALPHA_MAX]+I_right_array[il+i_alph*ALPHA_MAX];
-      }
-  }
-  
-
-  for(int il=0;il<local_nn;il++){
-    int k2=local_rjs_idx[il];
-    for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
-      exp_coeff[i_alph+k2*ALPHA_MAX]+=amplitudes[il]*exp_coeff_buffer_array[il+i_alph*LOCAL_NN];
-    }
-}
-}
 
 
  __global__ 
+ //__launch_bounds__ (64, 2)
  void cuda_buffer_newnew(double *exp_coeff, double *exp_coeff_der,
                          const double* rjs_in, const bool* mask, const double rcut_soft_in, 
                          const double rcut_hard_in, const double atom_sigma_in, 
@@ -3222,6 +2951,7 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   double I0_array[3 * ((7 > ALPHA_MAX + 4) ? 7 : ALPHA_MAX + 4) * LOCAL_NN];
   double lim_buffer_array[LOCAL_NN*3];
   double atom_widths[LOCAL_NN];
+  double atom_width_scaling;
 
   // Initialize local count for this thread
   int local_nn = 0;
@@ -3242,8 +2972,8 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
 
     // Increment local count if condition is true
     if (condition) {
-      // local_rjs_idx[local_nn]=idx+1;
-      // local_rjs[local_nn]=rjs_in[idx]/rcut_hard_in;
+      local_rjs_idx[local_nn]=idx+1;
+      local_rjs[local_nn]=rjs_in[idx]/rcut_hard_in;
       local_nn++;
     }
 
@@ -3261,12 +2991,12 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   }
   
   //redefine local_nn
-  if(tid<nn%WARP_SIZE){
-    local_nn=(nn+WARP_SIZE-1)/WARP_SIZE;
-  }
-  else{
-    local_nn=nn/WARP_SIZE;
-  }
+  // if(tid<nn%WARP_SIZE){
+  //   local_nn=(nn+WARP_SIZE-1)/WARP_SIZE;
+  // }
+  // else{
+  //   local_nn=nn/WARP_SIZE;
+  // }
 
   if(nn!=cpu_nn || nn>n_neighbors ){
     printf("WTF?\n");
@@ -3277,9 +3007,9 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
     int i_t=tid;
     for(int il=0;il<local_nn;il++){
       if(i_t<nn){
-        int idx=global_rjs_idx[i_t+max_nn*i];
-        local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
-        local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
+        //int idx=global_rjs_idx[i_t+max_nn*i];
+        //local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
+        //local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
         //amplitudes[il]=global_amplitudes[i_t+max_nn*i];
         //atom_widths[il]=global_atom_widths[i_t+max_nn*i];
         for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
@@ -3317,13 +3047,13 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
     double B_r[LOCAL_NN*7];
     double B_l[LOCAL_NN*7];
 
-    double local_atom_width_scaling = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaling;
+
     for(int il=0;il<local_nn;il++){
       atom_sigma_scaleds[il]=atom_sigma+atom_sigma_scaling*local_rjs[il];
       s2s[il]=atom_sigma_scaleds[il]*atom_sigma_scaleds[il];
       atom_widths[il] = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaleds[il];
     }
-    double atom_width_scaling = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaling;
+    atom_width_scaling = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaling;
     if( scaling_mode == 1000 ){
       if( amplitude_scaling == 0.0 ){
         for(int il=0;il<local_nn;il++){
@@ -3384,10 +3114,9 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
       lim_buffer_array[il+2*LOCAL_NN] = (rcut_hard < local_rjs[il] + atom_widths[il]) ? rcut_hard : local_rjs[il] + atom_widths[il]; // upper limit right 
     }
     int l_rjs_size=local_nn;
-    int atom_widths_size=local_nn;
     int left=-1; int right=1;
     get_constant_poly_filter_coeff_array(local_rjs,atom_widths,rcut_soft,filter_width, left, B_l,
-                                       l_rjs_size, atom_widths_size);
+                                       l_rjs_size);
 
     // i_t=tid;
     // for(int il=0;il<local_nn;il++){
@@ -3430,8 +3159,7 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
       }
     }
     
-    get_constant_poly_filter_coeff_array(local_rjs,atom_widths,rcut_soft,filter_width, right, B_r,
-                                       l_rjs_size, atom_widths_size);
+    get_constant_poly_filter_coeff_array(local_rjs,atom_widths,rcut_soft,filter_width, right, B_r,l_rjs_size);
     for(int il=0;il<local_nn; il++){
       radial_terms_one[0]=1.0;
       radial_terms_two[0]=1.0;
@@ -3510,26 +3238,26 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
       int i_t=tid;
       for(int il=0;il<local_nn;il++){
         if(i_t<nn){
-          int idx=global_rjs_idx[i_t+max_nn*i];
-          local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
-          local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
+          // int idx=global_rjs_idx[i_t+max_nn*i];
+          // local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
+          // local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
           //amplitudes[il]=global_amplitudes[i_t+max_nn*i];
           //atom_widths[il]=global_atom_widths[i_t+max_nn*i];
           for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
-            I_left_der_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
-            I_right_der_array[il+i_alph*LOCAL_NN] = global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+            //I_left_der_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+            //I_right_der_array[il+i_alph*LOCAL_NN] = global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
             //exp_coeff_buffer_der_array[il+i_alph*LOCAL_NN]=global_exp_buffer[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
-            M_left_der_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-            M_left_der_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-            M_right_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-            M_right_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+            //M_left_der_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+            //M_left_der_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+            //M_right_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+            //M_right_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
             // lim_buffer_array[il+0*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
             // lim_buffer_array[il+1*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
             // lim_buffer_array[il+2*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
           }
           for(int i_s=0;i_s<7;i_s++){
-            B_der_r[i_s+il*7]=global_B_right[i_t+max_nn*(i_s+7*i)];
-            B_der_l[i_s+il*7]=global_B_left[i_t+max_nn*(i_s+7*i)];
+            //B_der_r[i_s+il*7]=global_B_right[i_t+max_nn*(i_s+7*i)];
+            //B_der_l[i_s+il*7]=global_B_left[i_t+max_nn*(i_s+7*i)];
             for(int i_z=0;i_z<7;i_z++){
               //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*0))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(0+i*3)))];
               //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*1))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(1+i*3)))];
@@ -3541,11 +3269,10 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
       }
       
       int l_rjs_size=local_nn;
-      int atom_widths_size=local_nn;
       int left=-1; int right=1;
 
-      get_constant_poly_filter_coeff_der_array(local_rjs,atom_widths,rcut_soft,filter_width, left, B_der_l,
-                                        l_rjs_size, atom_widths_size);
+      get_constant_poly_filter_coeff_der_array(local_rjs,atom_widths,atom_width_scaling,rcut_soft,filter_width, 
+                                               left, B_der_l, l_rjs_size);
 
       for(int il=0;il<local_nn; il++){
         radial_terms_one[0]=1.0;
@@ -3568,6 +3295,11 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
           M_left_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=-temp2*I0_array[il+LOCAL_NN*(1*a_max+i_alph)];
         }
       }
+
+
+
+      get_constant_poly_filter_coeff_der_array(local_rjs,atom_widths,atom_width_scaling,rcut_soft,filter_width, 
+                                               right, B_der_r, l_rjs_size);
 
       for(int il=0;il<local_nn; il++){
       radial_terms_one[0]=1.0;

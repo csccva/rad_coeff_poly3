@@ -1033,9 +1033,9 @@ I0_array(1:nn, 5:alpha_max + 4, 2)
 exp_coeff_soft_der_array = I_left_der_array + I_right_der_array
 
 do j = 1, nn
-k2 = rjs_idx(j)
-exp_coeff_der(1:alpha_max, k2) = amplitudes(j) * exp_coeff_soft_der_array(j, 1:alpha_max) + &
-amplitudes_der(j) * exp_coeff_soft_array(j, 1:alpha_max)
+  k2 = rjs_idx(j)
+  exp_coeff_der(1:alpha_max, k2) = amplitudes(j) * exp_coeff_soft_der_array(j, 1:alpha_max) + &
+                                   amplitudes_der(j) * exp_coeff_soft_array(j, 1:alpha_max)
 end do
 
 deallocate( g_aux_left_der_array, g_aux_right_der_array, M_left_der_array, M_right_der_array, & 
@@ -1280,9 +1280,9 @@ do i = 1, n_sites
     if( do_derivatives )then      
       call get_constant_poly_filter_coeff_der_array(rjs, atom_widths, atom_width_scaling, rcut_soft, &
                                                     filter_width, 'left', B_der)
-    do k2=1,7
-      global_B_left(1:nn,k2,i)=B_der(k2,1:nn)
-    enddo
+    ! do k2=1,7
+    !   global_B_left(1:nn,k2,i)=B_der(k2,1:nn)
+    ! enddo
       !         We should try to figure out a more "vectorized way" of doing this
       do k2 = 1, nn
         M_left_der_array(k2, 1:7, 1) = I0_array(k2, 1:7, 1) * &
@@ -1297,9 +1297,9 @@ do i = 1, n_sites
 
       call get_constant_poly_filter_coeff_der_array(rjs, atom_widths, atom_width_scaling, rcut_soft, &
                                filter_width, 'right', B_der)
-    do k2=1,7
-      global_B_right(1:nn,k2,i)=B_der(k2,1:nn)
-    enddo
+    ! do k2=1,7
+    !   global_B_right(1:nn,k2,i)=B_der(k2,1:nn)
+    ! enddo
       !         We should try to figure out a more "vectorized way" of doing this
       do k2 = 1, nn
         M_right_der_array(k2, 1:7, 2) = I0_array(k2, 1:7, 2) * &
