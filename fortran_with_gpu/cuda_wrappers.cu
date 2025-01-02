@@ -2915,7 +2915,248 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   M[6+7*6]=720.0;
 }
 
+ __global__ 
+ //__launch_bounds__ (64, 2)
+ void cuda_soft_newnew(double *exp_coeff, double *exp_coeff_der,
+                         const double* rjs_in, const bool* mask, const double rcut_soft_in, 
+                         const double rcut_hard_in, const double atom_sigma_in, 
+                         const double atom_sigma_scaling, double atom_sigma, const int* n_neigh, 
+                         int *k_i, int alpha_max, 
+                         int scaling_mode, double amplitude_scaling, 
+                         double central_weight,  bool do_central,  bool c_do_derivatives,
+                         double rcut_soft, double rcut_hard, double filter_width,
+                         double *A,
+                         double *global_I_left_array, double *global_I_right_array, double *global_amplitudes, double *global_exp_buffer,
+                         int *global_rjs_idx, int max_nn, int *global_nn,
+                         double *global_I0_array, double *global_M_left_array, double *global_M_right_array,
+                         double *global_lim_buffer_array, double *global_B_right, double *global_B_left, double *global_M_rad_mono,
+                         double *global_rjs, double *global_atom_widths,
+                         int radial_enhancement) {
+  int tid = threadIdx.x;  // Thread ID within block (same as lane in this case)
+  int i=blockIdx.x;
+  int k=k_i[i];
+  int n_neighbors = n_neigh[i];  // Number of neighbors to process
+  double pi=acos(-1.0);
+  int cpu_nn=global_nn[i];
+  // Initialize local count for this thread
+  
+  int local_rjs_idx[LOCAL_NN];
+  double local_rjs[LOCAL_NN];
+  double amplitudes[LOCAL_NN];
+  double amplitudes_der[LOCAL_NN];
+  double exp_coeff_soft_array[LOCAL_NN*ALPHA_MAX];
+  int a_max=alpha_max+4;
+  double I0_array[3 * (ALPHA_MAX + 4) * LOCAL_NN];
+  double lim_buffer_array[LOCAL_NN*3];
+  double atom_widths[LOCAL_NN];
+  double atom_width_scaling;
 
+  // Initialize local count for this thread
+  int local_nn = 0;
+
+  // Constants for atom_widths computation
+  const double factor = 2.0 * sqrt(2.0 * log(2.0));
+
+  // Iterate through neighbors assigned to this thread
+  for (int j = tid; j < n_neighbors; j += WARP_SIZE) {
+    int idx = k +j;
+
+    // Compute atom_widths for the current neighbor
+    double atom_widths = factor * (atom_sigma_in + atom_sigma_scaling * rjs_in[idx]);
+
+    // Evaluate the conditions
+    bool condition = (rjs_in[idx] - atom_widths < rcut_soft_in) && mask[idx] ;
+
+    // Increment local count if condition is true
+    if (condition) {
+      // local_rjs_idx[local_nn]=idx+1;
+      // local_rjs[local_nn]=rjs_in[idx]/rcut_hard_in;
+      local_nn++;
+    }
+
+  }
+
+  int warp_nn= warp_red_int(local_nn);
+    // Broadcast the computed warp_nn to all threads in the warp
+    // HIP: Use __shfl
+    // CUDA Equivalent:
+    // int broadcasted_nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0);
+  int nn = __shfl(warp_nn, 0);
+    
+  if(nn>LOCAL_NN*WARP_SIZE){
+    printf(" \n Alert!!!! Alert!!! \n nn is bigger than LOCAL_NN*WARP_SIZE, LOCAL_NN! \n nn %d thread %d site %d\n", nn, (int)tid, i+1);
+  }
+  
+  // redefine local_nn
+  // if(tid<=nn%WARP_SIZE){
+  //   local_nn=(nn+WARP_SIZE-1)/WARP_SIZE;
+  // }
+  // else{
+  //   local_nn=nn/WARP_SIZE;
+  // }
+  if(tid<nn){
+    local_nn=1;
+  }
+  else{
+    local_nn=0;
+  }
+  if(nn!=cpu_nn || nn>n_neighbors ){
+    printf("WTF? in Soft Region\n");
+  }
+
+  if(local_nn>0)
+  {
+    double I_left_array[LOCAL_NN*ALPHA_MAX];
+    double I_right_array[LOCAL_NN*ALPHA_MAX];
+    double atom_sigma_scaleds[LOCAL_NN];
+    double s2s[LOCAL_NN];
+    double M_left_array [2 * ALPHA_MAX * LOCAL_NN];
+    double M_right_array[2 * ALPHA_MAX * LOCAL_NN];
+    double M_rad_mono[LOCAL_NN*7*7*3];
+    double B_r[LOCAL_NN*7];
+    double B_l[LOCAL_NN*7];
+
+    int i_t=tid;
+    for(int il=0;il<local_nn;il++){
+      if(i_t<nn){
+        int idx=global_rjs_idx[i_t+max_nn*i];
+        local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
+        local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
+        amplitudes[il]=global_amplitudes[i_t+max_nn*i];
+        //atom_widths[il]=global_atom_widths[i_t+max_nn*i];
+        for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+          //I_left_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+          //I_right_array[il+i_alph*LOCAL_NN] = global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+          //exp_coeff_buffer_array[il+i_alph*LOCAL_NN]=global_exp_buffer[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+          M_left_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+          M_left_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+          M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+          M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+        
+          // lim_buffer_array[il+0*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
+          // lim_buffer_array[il+1*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
+          // lim_buffer_array[il+2*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
+        }
+        for(int i_s=0;i_s<7;i_s++){
+          //B_r[i_s+il*7]=global_B_right[i_t+max_nn*(i_s+7*i)];
+          //B_l[i_s+il*7]=global_B_left[i_t+max_nn*(i_s+7*i)];
+          for(int i_z=0;i_z<7;i_z++){
+            //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*0))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(0+i*3)))];
+            //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*1))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(1+i*3)))];
+            //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*2))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(2+i*3)))];
+          }
+        }
+      }
+      i_t+=WARP_SIZE;
+    }
+
+    i_t=tid;
+    for(int il=0;il<local_nn;il++){
+      if(i_t<nn){
+        for(int i_alph=0;i_alph<a_max;i_alph++){
+          I0_array[il+(i_alph+0*a_max)*LOCAL_NN] = global_I0_array[i_t+(i_alph+(i*3+0)*a_max)*max_nn];
+          I0_array[il+(i_alph+1*a_max)*LOCAL_NN] = global_I0_array[i_t+(i_alph+(i*3+1)*a_max)*max_nn];
+          I0_array[il+(i_alph+2*a_max)*LOCAL_NN] = global_I0_array[i_t+(i_alph+(i*3+2)*a_max)*max_nn];
+        }
+      }
+      i_t+=WARP_SIZE;
+    }
+    for(int il=0;il<local_nn; il++){
+      for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+        double temp1 = 0.0;
+        double temp2 = 0.0;
+        
+        for(int i_k=0;i_k<4;i_k++){
+          temp1+=M_left_array[il+LOCAL_NN*(1*ALPHA_MAX+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+          temp2+=M_left_array[il+LOCAL_NN*(0*ALPHA_MAX+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+        }
+        I_left_array[il+i_alph*LOCAL_NN]=temp1*I0_array[il+LOCAL_NN*(1*a_max+i_alph+4)]-temp2*I0_array[il+LOCAL_NN*(0*a_max+i_alph+4)];
+      }
+    }
+    for(int il=0;il<local_nn; il++){
+      for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+        double temp1 = 0.0;
+        double temp2 = 0.0;
+        
+        for(int i_k=0;i_k<4;i_k++){
+          temp1+=M_right_array[il+LOCAL_NN*(1*7+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+          temp2+=M_right_array[il+LOCAL_NN*(0*7+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+        }
+        I_right_array[il+i_alph*LOCAL_NN]=temp1*I0_array[il+LOCAL_NN*(2*a_max+i_alph+4)]-temp2*I0_array[il+LOCAL_NN*(1*a_max+i_alph+4)];
+      }
+    }
+
+    for(int il=0;il<local_nn;il++){
+      for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+        exp_coeff_soft_array[il+i_alph*LOCAL_NN]=I_left_array[il+i_alph*LOCAL_NN]+I_right_array[il+i_alph*LOCAL_NN];
+      }
+    }
+
+    for(int il=0;il<local_nn;il++){
+      int k2=local_rjs_idx[il]-1;
+      for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+        exp_coeff[i_alph+k2*ALPHA_MAX]+=amplitudes[il]*exp_coeff_soft_array[il+i_alph*LOCAL_NN];
+      }
+    }
+  }
+  if(c_do_derivatives){
+    if(local_nn>0){
+      double exp_coeff_buffer_der_array[LOCAL_NN*ALPHA_MAX];
+      double I_left_der_array[LOCAL_NN*ALPHA_MAX];
+      double I_right_der_array[LOCAL_NN*ALPHA_MAX];
+      double M_left_der_array [2 * ALPHA_MAX * LOCAL_NN];
+      double M_right_der_array[2 * ALPHA_MAX * LOCAL_NN];
+      double M_radial_monomial_one[7];
+      double M_radial_monomial_two[7];
+      double radial_terms_one[7];
+      double radial_terms_two[7];
+      double B_der_r[LOCAL_NN*7];
+      double B_der_l[LOCAL_NN*7];
+
+
+      int i_t=tid;
+      for(int il=0;il<local_nn;il++){
+        if(i_t<nn){
+          // int idx=global_rjs_idx[i_t+max_nn*i];
+          // local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
+          // local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
+          //amplitudes[il]=global_amplitudes[i_t+max_nn*i];
+          //atom_widths[il]=global_atom_widths[i_t+max_nn*i];
+          for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+            //I_left_der_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+            //I_right_der_array[il+i_alph*LOCAL_NN] = global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+            //exp_coeff_buffer_der_array[il+i_alph*LOCAL_NN]=global_exp_buffer[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+            //M_left_der_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+            //M_left_der_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+            //M_right_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+            //M_right_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+            // lim_buffer_array[il+0*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
+            // lim_buffer_array[il+1*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
+            // lim_buffer_array[il+2*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
+          }
+          for(int i_s=0;i_s<7;i_s++){
+            //B_der_r[i_s+il*7]=global_B_right[i_t+max_nn*(i_s+7*i)];
+            //B_der_l[i_s+il*7]=global_B_left[i_t+max_nn*(i_s+7*i)];
+            for(int i_z=0;i_z<7;i_z++){
+              //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*0))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(0+i*3)))];
+              //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*1))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(1+i*3)))];
+              //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*2))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(2+i*3)))];
+            }
+          }
+        }
+        i_t+=WARP_SIZE;
+      }
+      
+      for(int il=0;il<local_nn;il++){
+        int k2=local_rjs_idx[il]-1;
+        for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+          //exp_coeff_der[i_alph+k2*ALPHA_MAX]+=amplitudes[il]*exp_coeff_buffer_der_array[il+i_alph*LOCAL_NN]+
+                                              //amplitudes_der[il]*exp_coeff_buffer_array[il+i_alph*LOCAL_NN];
+        }
+      }
+    }
+  }
+}
 
  __global__ 
  //__launch_bounds__ (64, 2)
@@ -2989,19 +3230,6 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   if(nn>LOCAL_NN*WARP_SIZE){
     printf(" \n Alert!!!! Alert!!! \n nn is bigger than LOCAL_NN*WARP_SIZE, LOCAL_NN! \n nn %d thread %d site %d\n", nn, (int)tid, i+1);
   }
-  
-  //redefine local_nn
-  // if(tid<nn%WARP_SIZE){
-  //   local_nn=(nn+WARP_SIZE-1)/WARP_SIZE;
-  // }
-  // else{
-  //   local_nn=nn/WARP_SIZE;
-  // }
-
-  if(nn!=cpu_nn || nn>n_neighbors ){
-    printf("WTF?\n");
-  }
-
 
   if(local_nn>0){
     int i_t=tid;
@@ -3367,6 +3595,8 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
     }
   }
 }
+
+
 extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coeff_d, double *exp_coeff_der_d, 
                      int n_exp_coeff,int n_exp_coeff_der,double rcut_hard_in, double rcut_soft_in, 
                      double *W_d, int *k_i_d, int alpha_max, int n_sites, int *n_neigh_d,
@@ -3394,6 +3624,22 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
     printf("\n Alert alpha_max variable! \n Fix ALPHA_MAX!\n");
     exit(1); 
   }
+
+
+  cuda_soft_newnew<<<n_sites, warp_size>>>(exp_coeff_d, exp_coeff_der_d,
+                                            rjs_in_d,mask_d,rcut_soft_in, 
+                                            rcut_hard_in, atom_sigma_in, 
+                                            atom_sigma_scaling, atom_sigma,n_neigh_d, 
+                                            k_i_d,alpha_max, scaling_mode, amplitude_scaling, 
+                                            central_weight, do_central, c_do_derivatives,
+                                            rcut_soft, rcut_hard, filter_width,
+                                            A_d,
+                                            global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d,
+                                            global_rjs_idx_d, max_nn, global_nn_d,
+                                            global_I0_array_d, global_M_left_array_d, global_M_right_array_d,
+                                            global_lim_buffer_array_d, global_B_right_d, global_B_left_d, global_M_rad_mono_d,
+                                            global_rjs_d, global_atom_widths_d,
+                                            radial_enhancement);
 
   cuda_buffer_newnew<<<n_sites, warp_size>>>(exp_coeff_d, exp_coeff_der_d,
                                             rjs_in_d,mask_d,rcut_soft_in, 
