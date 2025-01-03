@@ -2873,7 +2873,7 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
     M[6]=720.0;
   }
 }
-
+/* 
 __device__
 void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   
@@ -2913,6 +2913,43 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   M[6+7*5]=radial_terms[1]*720.0;
   
   M[6+7*6]=720.0;
+} */
+
+__device__
+void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, double *poly_right, int size_r0){
+
+   for (int il = 0; il < size_r0; il++) {
+    double x1 = (r[il+0*LOCAL_NN] - r0[il]) / width[il];
+    double x2 = (r[il+1*LOCAL_NN] - r0[il]) / width[il];
+
+    poly_left[il+(0+0*4)*LOCAL_NN]= 1.0-3.0*x1*x1-2.0*x1*x1*x1;
+    poly_left[il+(0+1*4)*LOCAL_NN]= 1.0-3.0*x2*x2-2.0*x2*x2*x2;
+
+    poly_left[il+(1+0*4)*LOCAL_NN]=-6.0*(x1*x1+x1)/width[il];
+    poly_left[il+(1+1*4)*LOCAL_NN]=-6.0*(x2*x2+x2)/width[il];
+
+    poly_left[il+(2+0*4)*LOCAL_NN]=-3.0*(2*x1+x1)/(width[il]*width[il]);
+    poly_left[il+(2+1*4)*LOCAL_NN]=-3.0*(2*x2+x2)/(width[il]*width[il]);
+
+    poly_left[il+(3+0*4)*LOCAL_NN]=-2.0/(width[il]*width[il]*width[il]);
+    poly_left[il+(3+1*4)*LOCAL_NN]=-2.0/(width[il]*width[il]*width[il]);
+
+
+    x1 = (r[il+1*LOCAL_NN] - r0[il]) / width[il];
+    x2 = (r[il+2*LOCAL_NN] - r0[il]) / width[il];
+
+    poly_right[il+(0+1*4)*LOCAL_NN]= 1.0-3.0*x1*x1+2.0*x1*x1*x1;
+    poly_right[il+(0+2*4)*LOCAL_NN]= 1.0-3.0*x2*x2+2.0*x2*x2*x2;
+
+    poly_right[il+(1+1*4)*LOCAL_NN]= 6.0*(x1*x1-x1)/width[il];
+    poly_right[il+(1+2*4)*LOCAL_NN]= 6.0*(x2*x2-x2)/width[il];
+
+    poly_right[il+(2+1*4)*LOCAL_NN]= 3.0*(2*x1-x1)/(width[il]*width[il]);
+    poly_right[il+(2+2*4)*LOCAL_NN]= 3.0*(2*x2-x2)/(width[il]*width[il]);
+
+    poly_right[il+(3+1*4)*LOCAL_NN]= 2.0/(width[il]*width[il]*width[il]);
+    poly_right[il+(3+2*4)*LOCAL_NN]= 2.0/(width[il]*width[il]*width[il]);
+    }
 }
 
  __global__ 
@@ -2948,7 +2985,7 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
   double exp_coeff_soft_array[LOCAL_NN*ALPHA_MAX];
   int a_max=alpha_max+4;
   double I0_array[3 * (ALPHA_MAX + 4) * LOCAL_NN];
-  double lim_buffer_array[LOCAL_NN*3];
+  double lim_soft_array[LOCAL_NN*3];
   double atom_widths[LOCAL_NN];
   double atom_width_scaling;
   double vect[4] = {-1.0, -1.0, -2.0, -6.0};
@@ -3017,8 +3054,8 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
     double M_rad_mono[LOCAL_NN*7*7*3];
     double B_r[LOCAL_NN*7];
     double B_l[LOCAL_NN*7];
-    double g_aux_left_array[LOCAL_NN*ALPHA_MAX*2];
-    double g_aux_right_array[LOCAL_NN*ALPHA_MAX*2];
+    double g_aux_left_array[LOCAL_NN*4*2];
+    double g_aux_right_array[LOCAL_NN*4*2];
 
     int i_t=tid;
     for(int il=0;il<local_nn;il++){
@@ -3037,13 +3074,15 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
           //M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
           //M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
         
-          g_aux_left_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-          g_aux_left_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-          g_aux_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-          g_aux_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-          // lim_buffer_array[il+0*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
-          // lim_buffer_array[il+1*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
-          // lim_buffer_array[il+2*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
+          if(i_alph<4){
+            g_aux_left_array [il+LOCAL_NN*(0*4+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+            g_aux_left_array [il+LOCAL_NN*(1*4+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+            g_aux_right_array[il+LOCAL_NN*(0*4+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+            g_aux_right_array[il+LOCAL_NN*(1*4+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+          }
+          lim_soft_array[il+0*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
+          lim_soft_array[il+1*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
+          lim_soft_array[il+2*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
         }
         for(int i_s=0;i_s<7;i_s++){
           //B_r[i_s+il*7]=global_B_right[i_t+max_nn*(i_s+7*i)];
@@ -3069,13 +3108,14 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
       }
       i_t+=WARP_SIZE;
     }
-
+    
+    g_aux_array_many(double *r, double *r0, double *width, g_aux_left_array,  g_aux_right_array, l_rjs_size);
     for(int il=0;il<local_nn; il++){
       for(int i_alph=0;i_alph<4;i_alph++){
-        M_left_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(0*a_max+i_alph)]*g_aux_left_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]*vect[i_alph];
-        M_left_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(1*a_max+i_alph)]*g_aux_left_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]*vect[i_alph];
-        M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(1*a_max+i_alph)]*g_aux_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]*vect[i_alph];
-        M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(2*a_max+i_alph)]*g_aux_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]*vect[i_alph];
+        M_left_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(0*a_max+i_alph)]*g_aux_left_array[il+LOCAL_NN*(0*4+i_alph)]*vect[i_alph];
+        M_left_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(1*a_max+i_alph)]*g_aux_left_array[il+LOCAL_NN*(1*4+i_alph)]*vect[i_alph];
+        M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(1*a_max+i_alph)]*g_aux_right_array[il+LOCAL_NN*(0*4+i_alph)]*vect[i_alph];
+        M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(2*a_max+i_alph)]*g_aux_right_array[il+LOCAL_NN*(1*4+i_alph)]*vect[i_alph];
       }
     }
 
