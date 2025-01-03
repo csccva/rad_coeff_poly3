@@ -1015,9 +1015,9 @@ do i = 1, n_sites
   global_atom_widths(1:nn,i)=atom_widths(1:nn)
   global_lim_buffer_array(1:nn,1:3,i)=lim_soft_array(1:nn,1:3)
 
-  global_I0_array(1:nn, 1:alpha_max + 4, 1:3,i)=I0_array(1:nn, 1:alpha_max + 4, 1:3)
-  global_g_aux_left_array (1:nn, 1:alpha_max,1:2,i)=g_aux_left_array (1:nn, 1:alpha_max, 1:2)
-  global_g_aux_right_array(1:nn, 1:alpha_max,1:2,i)=g_aux_right_array(1:nn, 1:alpha_max, 2:3)
+  ! global_I0_array(1:nn, 1:alpha_max + 4, 1:3,i)=I0_array(1:nn, 1:alpha_max + 4, 1:3)
+  ! global_g_aux_left_array (1:nn, 1:alpha_max,1:2,i)=g_aux_left_array (1:nn, 1:alpha_max, 1:2)
+  ! global_g_aux_right_array(1:nn, 1:alpha_max,1:2,i)=g_aux_right_array(1:nn, 1:alpha_max, 2:3)
   ! global_M_left_array (1:nn, 1:alpha_max, 1:2,i) = M_left_array (1:nn, 1:alpha_max, 1:2) 
   ! global_M_right_array(1:nn, 1:alpha_max, 1:2,i) = M_right_array(1:nn, 1:alpha_max, 2:3)
   
