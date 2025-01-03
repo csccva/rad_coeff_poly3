@@ -2918,37 +2918,36 @@ void get_M_radiam_monomial_all(int degree, double *M,double *radial_terms){
 __device__
 void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, double *poly_right, int size_r0){
 
-   for (int il = 0; il < size_r0; il++) {
-    double x1 = (r[il+0*LOCAL_NN] - r0[il]) / width[il];
-    double x2 = (r[il+1*LOCAL_NN] - r0[il]) / width[il];
+    for (int il = 0; il < size_r0; il++) {
+      double x1 = (r[il+0*LOCAL_NN] - r0[il]) / width[il];
+      double x2 = (r[il+1*LOCAL_NN] - r0[il]) / width[il];
 
-    poly_left[il+(0+0*4)*LOCAL_NN]= 1.0-3.0*x1*x1-2.0*x1*x1*x1;
-    poly_left[il+(0+1*4)*LOCAL_NN]= 1.0-3.0*x2*x2-2.0*x2*x2*x2;
+      poly_left[il+(0+0*4)*LOCAL_NN]= 1.0-3.0*x1*x1-2.0*x1*x1*x1;
+      poly_left[il+(0+1*4)*LOCAL_NN]= 1.0-3.0*x2*x2-2.0*x2*x2*x2;
 
-    poly_left[il+(1+0*4)*LOCAL_NN]=-6.0*(x1*x1+x1)/width[il];
-    poly_left[il+(1+1*4)*LOCAL_NN]=-6.0*(x2*x2+x2)/width[il];
+      poly_left[il+(1+0*4)*LOCAL_NN]=-6.0*(x1*x1+x1)/width[il];
+      poly_left[il+(1+1*4)*LOCAL_NN]=-6.0*(x2*x2+x2)/width[il];
 
-    poly_left[il+(2+0*4)*LOCAL_NN]=-3.0*(2*x1+x1)/(width[il]*width[il]);
-    poly_left[il+(2+1*4)*LOCAL_NN]=-3.0*(2*x2+x2)/(width[il]*width[il]);
+      poly_left[il+(2+0*4)*LOCAL_NN]=-3.0*(2*x1+1)/(width[il]*width[il]);
+      poly_left[il+(2+1*4)*LOCAL_NN]=-3.0*(2*x2+1)/(width[il]*width[il]);
 
-    poly_left[il+(3+0*4)*LOCAL_NN]=-2.0/(width[il]*width[il]*width[il]);
-    poly_left[il+(3+1*4)*LOCAL_NN]=-2.0/(width[il]*width[il]*width[il]);
+      poly_left[il+(3+0*4)*LOCAL_NN]=-2.0/(width[il]*width[il]*width[il]);
+      poly_left[il+(3+1*4)*LOCAL_NN]=-2.0/(width[il]*width[il]*width[il]);
 
+      x1 = (r[il+1*LOCAL_NN] - r0[il]) / width[il];
+      x2 = (r[il+2*LOCAL_NN] - r0[il]) / width[il];
 
-    x1 = (r[il+1*LOCAL_NN] - r0[il]) / width[il];
-    x2 = (r[il+2*LOCAL_NN] - r0[il]) / width[il];
+      poly_right[il+(0+0*4)*LOCAL_NN]= 1.0-3.0*x1*x1+2.0*x1*x1*x1;
+      poly_right[il+(0+1*4)*LOCAL_NN]= 1.0-3.0*x2*x2+2.0*x2*x2*x2;
 
-    poly_right[il+(0+1*4)*LOCAL_NN]= 1.0-3.0*x1*x1+2.0*x1*x1*x1;
-    poly_right[il+(0+2*4)*LOCAL_NN]= 1.0-3.0*x2*x2+2.0*x2*x2*x2;
+      poly_right[il+(1+0*4)*LOCAL_NN]= 6.0*(x1*x1-x1)/width[il];
+      poly_right[il+(1+1*4)*LOCAL_NN]= 6.0*(x2*x2-x2)/width[il];
 
-    poly_right[il+(1+1*4)*LOCAL_NN]= 6.0*(x1*x1-x1)/width[il];
-    poly_right[il+(1+2*4)*LOCAL_NN]= 6.0*(x2*x2-x2)/width[il];
+      poly_right[il+(2+0*4)*LOCAL_NN]= 3.0*(2*x1-1)/(width[il]*width[il]);
+      poly_right[il+(2+1*4)*LOCAL_NN]= 3.0*(2*x2-1)/(width[il]*width[il]);
 
-    poly_right[il+(2+1*4)*LOCAL_NN]= 3.0*(2*x1-x1)/(width[il]*width[il]);
-    poly_right[il+(2+2*4)*LOCAL_NN]= 3.0*(2*x2-x2)/(width[il]*width[il]);
-
-    poly_right[il+(3+1*4)*LOCAL_NN]= 2.0/(width[il]*width[il]*width[il]);
-    poly_right[il+(3+2*4)*LOCAL_NN]= 2.0/(width[il]*width[il]*width[il]);
+      poly_right[il+(3+0*4)*LOCAL_NN]= 2.0/(width[il]*width[il]*width[il]);
+      poly_right[il+(3+1*4)*LOCAL_NN]= 2.0/(width[il]*width[il]*width[il]);
     }
 }
 
@@ -3064,7 +3063,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
         local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
         local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
         amplitudes[il]=global_amplitudes[i_t+max_nn*i];
-        //atom_widths[il]=global_atom_widths[i_t+max_nn*i];
+        atom_widths[il]=global_atom_widths[i_t+max_nn*i];
         for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
           //I_left_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
           //I_right_array[il+i_alph*LOCAL_NN] = global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
@@ -3109,7 +3108,8 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
       i_t+=WARP_SIZE;
     }
     
-    g_aux_array_many(double *r, double *r0, double *width, g_aux_left_array,  g_aux_right_array, l_rjs_size);
+    int l_rjs_size=local_nn;
+    g_aux_array_many(lim_soft_array, local_rjs,atom_widths, g_aux_left_array,  g_aux_right_array, l_rjs_size);
     for(int il=0;il<local_nn; il++){
       for(int i_alph=0;i_alph<4;i_alph++){
         M_left_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(0*a_max+i_alph)]*g_aux_left_array[il+LOCAL_NN*(0*4+i_alph)]*vect[i_alph];
