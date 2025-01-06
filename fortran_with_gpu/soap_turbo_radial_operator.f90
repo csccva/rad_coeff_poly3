@@ -1062,6 +1062,11 @@ do i = 1, n_sites
                                          I0_array(1:nn, 5:alpha_max + 4, 2)
   exp_coeff_soft_der_array = I_left_der_array + I_right_der_array
 
+  
+  global_g_aux_left_array (1:nn, 1:alpha_max,1:2,i)=g_aux_left_der_array (1:nn, 1:alpha_max, 1:2)
+  global_g_aux_right_array(1:nn, 1:alpha_max,1:2,i)=g_aux_right_der_array(1:nn, 1:alpha_max, 2:3)
+  ! global_M_left_array (1:nn, 1:alpha_max, 1:2,i) = M_left_der_array (1:nn, 1:alpha_max, 1:2) 
+  ! global_M_right_array(1:nn, 1:alpha_max, 1:2,i) = M_right_der_array(1:nn, 1:alpha_max, 2:3)
   !global_I_left_array(1:nn,1:alpha_max,i) =I_left_der_array
   !global_I_right_array(1:nn,1:alpha_max,i)=I_right_der_array
   !global_exp_buffer(1:nn,1:alpha_max,i)=exp_coeff_soft_der_array
