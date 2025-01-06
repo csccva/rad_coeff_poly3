@@ -2875,6 +2875,43 @@ void get_M_radiam_monomial(int degree, double *M,double *radial_terms, int i_M){
 }
 
 __device__
+void g_aux_der_array_many(double *r, double *r0, double *width, double width_scaling,
+                      double *poly_left, double *poly_right, int size_r0){
+
+    for (int il = 0; il < size_r0; il++) {
+      double x1 = (r[il+0*LOCAL_NN] - r0[il]) / width[il];
+      double x2 = (r[il+1*LOCAL_NN] - r0[il]) / width[il];
+
+      poly_left[il+(0+0*4)*LOCAL_NN]= 6.0*(x1+(width_scaling+1)*x1*x1+width_scaling*x1*x1*x1) / width[il];
+      poly_left[il+(0+1*4)*LOCAL_NN]= 6.0*(x2+(width_scaling+1)*x2*x2+width_scaling*x2*x2*x2) / width[il];
+
+      poly_left[il+(1+0*4)*LOCAL_NN]= 6.0*(1.0+2.0*(width_scaling+1.0)*x1+3.0*width_scaling*x1*x1)/(width[il]*width[il]);
+      poly_left[il+(1+1*4)*LOCAL_NN]= 6.0*(1.0+2.0*(width_scaling+1.0)*x2+3.0*width_scaling*x2*x2)/(width[il]*width[il]);
+
+      poly_left[il+(2+0*4)*LOCAL_NN]= 6.0*(width_scaling+1.0+3.0*width_scaling*x1)/(width[il]*width[il]*width[il]);
+      poly_left[il+(2+1*4)*LOCAL_NN]= 6.0*(width_scaling+1.0+3.0*width_scaling*x2)/(width[il]*width[il]*width[il]);
+
+      poly_left[il+(3+0*4)*LOCAL_NN]= 6.0*width_scaling/(width[il]*width[il]*width[il]*width[il]);
+      poly_left[il+(3+1*4)*LOCAL_NN]= 6.0*width_scaling/(width[il]*width[il]*width[il]*width[il]);
+
+      x1 = (r[il+1*LOCAL_NN] - r0[il]) / width[il];
+      x2 = (r[il+2*LOCAL_NN] - r0[il]) / width[il];
+
+      poly_right[il+(0+0*4)*LOCAL_NN]= 6.0*(x1+(width_scaling-1)*x1*x1-width_scaling*x1*x1*x1) / width[il];
+      poly_right[il+(0+1*4)*LOCAL_NN]= 6.0*(x2+(width_scaling-1)*x2*x2-width_scaling*x2*x2*x2) / width[il];
+
+      poly_right[il+(1+0*4)*LOCAL_NN]= 6.0*(1.0+2.0*(width_scaling-1.0)*x1-3.0*width_scaling*x1*x1)/(width[il]*width[il]);
+      poly_right[il+(1+1*4)*LOCAL_NN]= 6.0*(1.0+2.0*(width_scaling-1.0)*x2-3.0*width_scaling*x2*x2)/(width[il]*width[il]);
+
+      poly_right[il+(2+0*4)*LOCAL_NN]= 6.0*(width_scaling-1.0-3.0*width_scaling*x1)/(width[il]*width[il]*width[il]);
+      poly_right[il+(2+1*4)*LOCAL_NN]= 6.0*(width_scaling-1.0-3.0*width_scaling*x2)/(width[il]*width[il]*width[il]);
+
+      poly_right[il+(3+0*4)*LOCAL_NN]=-6.0*width_scaling/(width[il]*width[il]*width[il]*width[il]);
+      poly_right[il+(3+1*4)*LOCAL_NN]=-6.0*width_scaling/(width[il]*width[il]*width[il]*width[il]);
+    }
+}
+
+__device__
 void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, double *poly_right, int size_r0){
 
     for (int il = 0; il < size_r0; il++) {
@@ -2909,7 +2946,6 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
       poly_right[il+(3+1*4)*LOCAL_NN]= 2.0/(width[il]*width[il]*width[il]);
     }
 }
-
  __global__ 
  //__launch_bounds__ (64, 2)
  void cuda_soft_newnew(double *exp_coeff, double *exp_coeff_der,
@@ -2933,9 +2969,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
   int k=k_i[i];
   int n_neighbors = n_neigh[i];  // Number of neighbors to process
   double pi=acos(-1.0);
-  int cpu_nn=global_nn[i];
-  // Initialize local count for this thread
-  
+  // int cpu_nn=global_nn[i];
   int local_rjs_idx[LOCAL_NN];
   double local_rjs[LOCAL_NN];
   double amplitudes[LOCAL_NN];
@@ -2966,8 +3000,8 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
 
     // Increment local count if condition is true
     if (condition) {
-      // local_rjs_idx[local_nn]=idx+1;
-      // local_rjs[local_nn]=rjs_in[idx]/rcut_hard_in;
+      local_rjs_idx[local_nn]=idx+1;
+      local_rjs[local_nn]=rjs_in[idx]/rcut_hard_in;
       local_nn++;
     }
 
@@ -2991,15 +3025,15 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
   // else{
   //   local_nn=nn/WARP_SIZE;
   // }
-  if(tid<nn){
-    local_nn=1;
-  }
-  else{
-    local_nn=0;
-  }
-  if(nn!=cpu_nn || nn>n_neighbors ){
-    printf("WTF? in Soft Region\n");
-  }
+  // if(tid<nn){
+  //   local_nn=1;
+  // }
+  // else{
+  //   local_nn=0;
+  // }
+  // if(nn!=cpu_nn || nn>n_neighbors ){
+  //   printf("WTF? in Soft Region\n");
+  // }
 
   if(local_nn>0)
   {
@@ -3018,9 +3052,9 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
     int i_t=tid;
     for(int il=0;il<local_nn;il++){
       if(i_t<nn){
-        int idx=global_rjs_idx[i_t+max_nn*i];
-        local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
-        local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
+        // int idx=global_rjs_idx[i_t+max_nn*i];
+        // local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
+        // local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
         // amplitudes[il]=global_amplitudes[i_t+max_nn*i];
         // atom_widths[il]=global_atom_widths[i_t+max_nn*i];
         for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
@@ -3212,20 +3246,17 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
             //I_left_der_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
             //I_right_der_array[il+i_alph*LOCAL_NN] = global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
             //exp_coeff_soft_der_array[il+i_alph*LOCAL_NN]=global_exp_buffer[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
-            M_left_der_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-            M_left_der_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-            M_right_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-            M_right_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+            // M_left_der_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+            // M_left_der_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+            // M_right_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+            // M_right_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
             
-          if(i_alph<4){
-            g_aux_left_der_array [il+LOCAL_NN*(0*4+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-            g_aux_left_der_array [il+LOCAL_NN*(1*4+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-            g_aux_right_der_array[il+LOCAL_NN*(0*4+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-            g_aux_right_der_array[il+LOCAL_NN*(1*4+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-          }
-            // lim_buffer_array[il+0*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
-            // lim_buffer_array[il+1*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
-            // lim_buffer_array[il+2*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
+            // if(i_alph<4){
+            //   g_aux_left_der_array [il+LOCAL_NN*(0*4+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+            //   g_aux_left_der_array [il+LOCAL_NN*(1*4+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+            //   g_aux_right_der_array[il+LOCAL_NN*(0*4+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+            //   g_aux_right_der_array[il+LOCAL_NN*(1*4+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+            // }
           }
           for(int i_s=0;i_s<7;i_s++){
             //B_der_r[i_s+il*7]=global_B_right[i_t+max_nn*(i_s+7*i)];
@@ -3240,40 +3271,43 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
         i_t+=WARP_SIZE;
       }
       
+      int l_rjs_size=local_nn;
+      g_aux_der_array_many(lim_soft_array, local_rjs,atom_widths, atom_width_scaling, 
+                           g_aux_left_der_array,  g_aux_right_der_array, l_rjs_size);
     
-    for(int il=0;il<local_nn; il++){
-      for(int i_alph=0;i_alph<4;i_alph++){
-        M_left_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(0*a_max+i_alph)]*g_aux_left_der_array[il+LOCAL_NN*(0*4+i_alph)]*vect[i_alph];
-        M_left_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(1*a_max+i_alph)]*g_aux_left_der_array[il+LOCAL_NN*(1*4+i_alph)]*vect[i_alph];
-        M_right_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(1*a_max+i_alph)]*g_aux_right_der_array[il+LOCAL_NN*(0*4+i_alph)]*vect[i_alph];
-        M_right_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(2*a_max+i_alph)]*g_aux_right_der_array[il+LOCAL_NN*(1*4+i_alph)]*vect[i_alph];
+      for(int il=0;il<local_nn; il++){
+        for(int i_alph=0;i_alph<4;i_alph++){
+          M_left_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(0*a_max+i_alph)]*g_aux_left_der_array[il+LOCAL_NN*(0*4+i_alph)]*vect[i_alph];
+          M_left_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(1*a_max+i_alph)]*g_aux_left_der_array[il+LOCAL_NN*(1*4+i_alph)]*vect[i_alph];
+          M_right_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(1*a_max+i_alph)]*g_aux_right_der_array[il+LOCAL_NN*(0*4+i_alph)]*vect[i_alph];
+          M_right_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=I0_array[il+LOCAL_NN*(2*a_max+i_alph)]*g_aux_right_der_array[il+LOCAL_NN*(1*4+i_alph)]*vect[i_alph];
+        }
       }
-    }
 
-    for(int il=0;il<local_nn; il++){
-      for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
-        double temp1 = 0.0;
-        double temp2 = 0.0;
+      for(int il=0;il<local_nn; il++){
+        for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+          double temp1 = 0.0;
+          double temp2 = 0.0;
         
-        for(int i_k=0;i_k<4;i_k++){
-          temp1+=M_left_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_k)]*A[i_alph+i_k*ALPHA_MAX];
-          temp2+=M_left_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+          for(int i_k=0;i_k<4;i_k++){
+            temp1+=M_left_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+            temp2+=M_left_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+          }
+          I_left_der_array[il+i_alph*LOCAL_NN]=temp1*I0_array[il+LOCAL_NN*(1*a_max+i_alph+4)]-temp2*I0_array[il+LOCAL_NN*(0*a_max+i_alph+4)];
         }
-        I_left_der_array[il+i_alph*LOCAL_NN]=temp1*I0_array[il+LOCAL_NN*(1*a_max+i_alph+4)]-temp2*I0_array[il+LOCAL_NN*(0*a_max+i_alph+4)];
       }
-    }
-    for(int il=0;il<local_nn; il++){
-      for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
-        double temp1 = 0.0;
-        double temp2 = 0.0;
+      for(int il=0;il<local_nn; il++){
+        for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+          double temp1 = 0.0;
+          double temp2 = 0.0;
         
-        for(int i_k=0;i_k<4;i_k++){
-          temp1+=M_right_der_array[il+LOCAL_NN*(1*7+i_k)]*A[i_alph+i_k*ALPHA_MAX];
-          temp2+=M_right_der_array[il+LOCAL_NN*(0*7+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+          for(int i_k=0;i_k<4;i_k++){
+            temp1+=M_right_der_array[il+LOCAL_NN*(1*7+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+            temp2+=M_right_der_array[il+LOCAL_NN*(0*7+i_k)]*A[i_alph+i_k*ALPHA_MAX];
+          }
+          I_right_der_array[il+i_alph*LOCAL_NN]=temp1*I0_array[il+LOCAL_NN*(2*a_max+i_alph+4)]-temp2*I0_array[il+LOCAL_NN*(1*a_max+i_alph+4)];
         }
-        I_right_der_array[il+i_alph*LOCAL_NN]=temp1*I0_array[il+LOCAL_NN*(2*a_max+i_alph+4)]-temp2*I0_array[il+LOCAL_NN*(1*a_max+i_alph+4)];
       }
-    }
 
      
       for(int il=0;il<local_nn;il++){

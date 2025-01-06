@@ -704,7 +704,7 @@ MODULE F_B_C
       type(c_ptr) :: gpu_stream
       end subroutine
 
-      subroutine gpu_device_synchronize(gpu_stream) &
+      subroutine gpu_device_synchronize() &
                                       bind(C,name="gpu_device_synchronize")
       use iso_c_binding
       end subroutine

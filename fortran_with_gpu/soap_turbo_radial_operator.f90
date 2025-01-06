@@ -745,35 +745,40 @@ real(c_double), allocatable :: global_lim_buffer_array(:,:,:),global_B_right(:,:
 real(c_double), allocatable :: global_atom_widths(:,:),global_rjs(:,:)
 real(c_double), allocatable :: global_g_aux_left_array(:,:,:,:),global_g_aux_right_array(:,:,:,:)
 type(c_ptr) :: global_g_aux_left_array_d,global_g_aux_right_array_d
+real*8 :: f_time(2)=0.d0
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 rank=0
 max_nn=100
 
-allocate(global_I_left_array(1:max_nn,1:alpha_max,1:n_sites))
-allocate(global_I_right_array(1:max_nn,1:alpha_max,1:n_sites))
-allocate(global_amplitudes(1:max_nn,1:n_sites))
-allocate( global_rjs_idx(1:max_nn,1:n_sites))
-allocate( global_nn(1:n_sites))
+! allocate(global_I_left_array(1:max_nn,1:alpha_max,1:n_sites))
+! allocate(global_I_right_array(1:max_nn,1:alpha_max,1:n_sites))
+! allocate(global_amplitudes(1:max_nn,1:n_sites))
+! allocate( global_rjs_idx(1:max_nn,1:n_sites))
+! allocate( global_nn(1:n_sites))
 
-allocate(global_exp_buffer(1:max_nn,1:alpha_max,1:n_sites))
+! allocate(global_exp_buffer(1:max_nn,1:alpha_max,1:n_sites))
 
-allocate(global_I0_array(1:max_nn, 1:alpha_max + 4, 1:3, 1:n_sites))
-allocate(global_M_left_array(1:max_nn, 1:alpha_max, 1:2, 1:n_sites))
-allocate(global_M_right_array(1:max_nn, 1:alpha_max, 1:2, 1:n_sites))
-allocate(global_lim_buffer_array(1:max_nn,1:3,1:n_sites))
-allocate(global_B_right(1:max_nn,1:7,1:n_sites))
-allocate(global_B_left(1:max_nn,1:7,1:n_sites))
-allocate(global_M_rad_mono(1:max_nn,1:7,1:7,1:3,1:n_sites))
+! allocate(global_I0_array(1:max_nn, 1:alpha_max + 4, 1:3, 1:n_sites))
+! allocate(global_M_left_array(1:max_nn, 1:alpha_max, 1:2, 1:n_sites))
+! allocate(global_M_right_array(1:max_nn, 1:alpha_max, 1:2, 1:n_sites))
+! allocate(global_lim_buffer_array(1:max_nn,1:3,1:n_sites))
+! allocate(global_B_right(1:max_nn,1:7,1:n_sites))
+! allocate(global_B_left(1:max_nn,1:7,1:n_sites))
+! allocate(global_M_rad_mono(1:max_nn,1:7,1:7,1:3,1:n_sites))
 
-allocate(global_atom_widths(1:max_nn,n_sites))
-allocate(global_rjs(1:max_nn,n_sites))
-allocate(global_g_aux_left_array (1:max_nn,1:alpha_max,1:2,1:n_sites))
-allocate(global_g_aux_right_array(1:max_nn,1:alpha_max,1:2,1:n_sites))
+! allocate(global_atom_widths(1:max_nn,n_sites))
+! allocate(global_rjs(1:max_nn,n_sites))
+! allocate(global_g_aux_left_array (1:max_nn,1:alpha_max,1:2,1:n_sites))
+! allocate(global_g_aux_right_array(1:max_nn,1:alpha_max,1:2,1:n_sites))
 
 num_scaling_mode=-100000
 
 call gpu_set_device(rank)
 call create_cublas_handle(cublas_handle, gpu_stream)
+
+call  gpu_device_synchronize()
+call cpu_time(f_time(1))
+
 c_do_derivatives=do_derivatives
 c_do_central=do_central
 
@@ -818,638 +823,77 @@ st_A=alpha_max*7*c_double
 call gpu_malloc_all(A_d,st_A,gpu_stream)
 call cpy_htod(c_loc(A),A_d,st_A, gpu_stream)
 
-write(*,*) "Soft Region"
-
-! NOTE: the vectorization can potentially be done for all atoms at one, where nn = size(rjs_in), then only
-! obvious thing to be careful about I can think of is handling of the central atoms in the flattened array
-k = 0
-do i = 1, n_sites
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-!   check number of atoms within soap cutoff
-!     nn = count( rjs_in(k+1:k+n_neigh(i)) < rcut_hard_in .and. mask(k+1:k+n_neigh(i)) )
-!     if( nn < 1 )then
-!       cycle
-!     end if
-
-
-!!! SOFT REGION
-!     Temporarily allocate this as oversized array:
-  allocate( atom_widths(1:n_neigh(i)) )
-  atom_widths = 2.d0*sqrt(2.d0*log(2.d0))*(atom_sigma_in + atom_sigma_scaling*rjs_in(k+1:k+n_neigh(i)))
-
-!     count number of atoms fully within soft region
-    nn = count( rjs_in(k+1:k+n_neigh(i)) - atom_widths < rcut_soft_in .and. mask(k+1:k+n_neigh(i)) )
-    global_nn(i)=nn
-! write(*,*) "Soft Region", i, nn
-  if( nn > 0 )then
-!       These need to be allocated immediately
-  allocate( rjs(1:nn) )
-  allocate( rjs_idx(1:nn) )
-
-!       make assignment between original neighbors and reduced neighbors
-  k2 = 1
-  do j = 1, n_neigh(i)
-!         if( rjs_in(k+j) < rcut_hard_in .and. mask(k+j) )then
-    if( rjs_in(k+j) - atom_widths(j) < rcut_soft_in .and. mask(k+j) )then
-      rjs(k2) = rjs_in(k+j)
-      rjs_idx(k2) = k+j
-      k2 = k2 + 1
-    end if
-  end do
-  
-  deallocate( atom_widths )
-
-!       allocate arrays that depend on the number of neighbors inside soap cutoff
-  allocate( atom_sigma_scaleds(1:nn) )
-  allocate( s2s(1:nn) )
-  allocate( atom_widths(1:nn) )
-  allocate( lim_soft_array(1:nn, 1:3) )
-!        allocate( soft_weights(1:nn) )
-!        allocate( buffer_weights(1:nn) )
-!       we might be able to get some extra speed by swapping the order of some of these dimensions
-  allocate( I0_array(1:nn, 1:alpha_max + 4, 1:3) )
-  allocate( g_aux_left_array(1:nn, 1:alpha_max, 1:2) )
-  allocate( g_aux_right_array(1:nn, 1:alpha_max, 2:3) ) ! note the 2:3 bounds here
-  g_aux_left_array = 0.d0
-  g_aux_right_array= 0.d0
-  allocate( M_left_array(1:nn, 1:alpha_max, 1:2) )
-  allocate( M_right_array(1:nn, 1:alpha_max, 2:3) ) ! note the 2:3 bounds here
-  M_left_array(1:nn, 1:alpha_max, 1:2)=0.d0
-  M_right_array(1:nn, 1:alpha_max, 2:3)=0.d0
-  allocate( I_left_array(1:nn, 1:alpha_max) )
-  allocate( I_right_array(1:nn, 1:alpha_max) )
-  allocate( exp_coeff_soft_array(1:nn, 1:alpha_max) )
-!        allocate( exp_coeff_buffer_array(1:nn, 1:alpha_max) )
-  allocate( amplitudes(1:nn) )
-  allocate( amplitudes_der(1:nn) )
-  allocate( B(1:7, 1:nn) )
-
-  if( do_derivatives )then
-    allocate( g_aux_left_der_array(1:nn, 1:alpha_max, 1:2) )
-    allocate( g_aux_right_der_array(1:nn, 1:alpha_max, 2:3) ) ! note the 2:3 bounds here
-    allocate( M_left_der_array(1:nn, 1:alpha_max, 1:2) )
-    allocate( M_right_der_array(1:nn, 1:alpha_max, 2:3) ) ! note the 2:3 bounds here
-    allocate( I_left_der_array(1:nn, 1:alpha_max) )
-    allocate( I_right_der_array(1:nn, 1:alpha_max) )
-    allocate( exp_coeff_soft_der_array(1:nn, 1:alpha_max) )
-  end if
-
-
-!       define atom parameters in vector form
-!   **************** New basis ******************
-  rjs = rjs/rcut_hard_in
-!   *********************************************
-  atom_sigma_scaleds = atom_sigma + atom_sigma_scaling*rjs
-  s2s = atom_sigma_scaleds**2
-  atom_widths = 2.d0*sqrt(2.d0*log(2.d0))*atom_sigma_scaleds
-  atom_width_scaling = 2.d0*sqrt(2.d0*log(2.d0))*atom_sigma_scaling
-!   ~~~~~~~~~~~~~~~ Amplitude ~~~~~~~~~~~~~~~~~~~~~~~
-  if( scaling_mode == "polynomial" )then
-!         WARNING: the 1/atom_sigma_angular^2 term is missing from these amplitudes and needs to
-!                  be taken into account in the corresponding part of the code.
-!       
-!         WARNING2: These expressions here already assume rcut_hard = 1., so this parameter is missing
-!                   from the expressions
-    if( amplitude_scaling == 0.d0 )then
-      amplitudes = 1.d0 / atom_sigma_scaleds
-      amplitudes_der = - atom_sigma_scaling / s2s 
-!            else if( 1.d0 + 2.d0*rjs**3 - 3.d0*rjs**2 <= 1.d-10 )then ! FIX THESE !!!!!!!!!!!!!!!!!!!!!!!!!!
-!              amplitudes = 0.d0
-!              amplitude_ders = 0.d0
-    else
-      if( amplitude_scaling == 1.d0 )then
-        amplitudes = 1.d0 / atom_sigma_scaleds * ( 1.d0 + 2.d0*rjs**3 - 3.d0*rjs**2 )
-        amplitudes_der = 6.d0 / atom_sigma_scaleds * (rjs**2 - rjs) &
-                       - atom_sigma_scaling / atom_sigma_scaleds * amplitudes
-      else
-        amplitudes = 1.d0 / atom_sigma_scaleds * ( 1.d0 + 2.d0*rjs**3 - 3.d0*rjs**2 )**amplitude_scaling
-        amplitudes_der = 6.d0*amplitude_scaling / atom_sigma_scaleds * (rjs**2 - rjs) &
-                     * ( 1.d0 + 2.d0*rjs**3 - 3.d0*rjs**2 )**(amplitude_scaling - 1.d0) &
-                     - atom_sigma_scaling / atom_sigma_scaleds * amplitudes
-      end if
-    end if
-  end if
-!       The central atom needs to be scaled by central_weight
-  if( size(amplitudes) > 0 )then
-    if( rjs_idx(1) == k+1 )then
-      amplitudes(1) = central_weight * amplitudes(1) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      amplitudes_der(1) = central_weight * amplitudes_der(1) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    end if
-  end if
-
-!       The radial enhancement adds a scaling corresponding to the integral of a Gaussian at the position
-!       of atom j.
-  if( radial_enhancement == 1 )then
-    amplitudes_der = amplitudes * ( 1.d0 + dsqrt(2.d0/pi)*atom_sigma_scaling ) + &
-    amplitudes_der * ( rjs + dsqrt(2.d0/pi)*atom_sigma_scaleds )
-    amplitudes = amplitudes * ( rjs + dsqrt(2.d0/pi)*atom_sigma_scaleds )
-  else if( radial_enhancement == 2 )then
-      amplitudes_der = amplitudes*( 2.d0*rjs + 2.d0*atom_sigma_scaleds*atom_sigma_scaling + &
-      dsqrt(8.d0/pi)*atom_sigma_scaleds + dsqrt(8.d0/pi)*rjs*atom_sigma_scaling ) + &
-      amplitudes_der*( rjs**2 + s2s + dsqrt(8.d0/pi)*atom_sigma_scaleds*rjs )
-      amplitudes = amplitudes * ( rjs**2 + s2s + dsqrt(8.d0/pi)*atom_sigma_scaleds*rjs )
-  end if     
-!   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-!       NOTE: this below is design to be used with arrays that contain all the atoms. In some cases, the 
-!       left_weights or right_weights might contain lots of zeros, in which case a speed up of close to x2
-!       could be achieved by not doing all atoms but only those for which the weights are 1. 
-!       One could refactor this code with the nn construction to have, e.g., nn_soft and nn_buffer
-!       define arrays that give contribution of atoms within left and right of rcut_soft
-!       Note that these are integer arrays (0|1 = .false.|.true.)
-!        soft_weights = rjs - atom_widths < rcut_soft
-!        nn_soft = count(soft_weights)
-!        buffer_weights = rcut_soft < rcut_hard .and. rjs + atom_widths > rcut_soft
-!        nn_buffer = count(buffer_weights)
-
-!       handle the central atom contribution; 
-!       NOTE: I'M NOT SURE ABOUT THE NEED FOR THIS DO_CENTRAL TAG HERE, IT SHOULD BE HANDLED VIA THE CENTRAL_WEIGHT
-  if( .not. do_central )then
-    if( size(amplitudes) > 0 )then
-      if( rjs_idx(1) == k+1 )then
-        amplitudes(1) = 0.d0
-      end if
-    end if
-  end if
-
-
-!       integration limits inside r_soft
-  lim_soft_array(:, 1) = max( 0.d0, rjs - atom_widths )      ! lower limit left
-  lim_soft_array(:, 2) = min( rjs, rcut_soft )               ! upper limit left / lower limit right
-  lim_soft_array(:, 3) = min( rcut_soft, rjs + atom_widths ) ! upper limit right
-
-!       dimensions of M_radial_poly_array are (1:nn, 1:alpha_max + 4, 1:3)
-  I0_array = M_radial_poly_array(lim_soft_array, alpha_max + 4, rcut_hard)
-  g_aux_left_array(1:nn, 1:4, 1:2) = g_aux_array(lim_soft_array(:, 1:2), rjs(:), atom_widths(:), "left")
-  g_aux_right_array(1:nn, 1:4, 2:3) = g_aux_array(lim_soft_array(:, 2:3), rjs(:), atom_widths(:), "right")
-
-  vect = [-1.d0, -1.d0, -2.d0, -6.d0]
-  do j = 1, 4
-    M_left_array(1:nn, j, 1) = I0_array(1:nn, j, 1) * g_aux_left_array(1:nn, j, 1) * vect(j)
-  end do
-  do j = 1, 4
-    M_left_array(1:nn, j, 2) = I0_array(1:nn, j, 2) * g_aux_left_array(1:nn, j, 2) * vect(j)
-  end do
-  do j = 1, 4
-    M_right_array(1:nn, j, 2) = I0_array(1:nn, j, 2) * g_aux_right_array(1:nn, j, 2) * vect(j)
-  end do
-  do j = 1, 4
-      M_right_array(1:nn, j, 3) = I0_array(1:nn, j, 3) * g_aux_right_array(1:nn, j, 3) * vect(j)
-  end do
-
-  I_left_array(1:nn, 1:alpha_max) = matmul( M_left_array(1:nn, 1:4, 2), transpose(A(1:alpha_max, 1:4)) ) * &
-                                    I0_array(1:nn, 5:alpha_max + 4, 2) - &
-                                    matmul( M_left_array(1:nn, 1:4, 1), transpose(A(1:alpha_max, 1:4)) ) * &
-                                    I0_array(1:nn, 5:alpha_max + 4, 1)
-  I_right_array(1:nn, 1:alpha_max) = matmul( M_right_array(1:nn, 1:4, 3), transpose(A(1:alpha_max, 1:4)) ) * &
-                                     I0_array(1:nn, 5:alpha_max + 4, 3) - &
-                                     matmul( M_right_array(1:nn, 1:4, 2), transpose(A(1:alpha_max, 1:4)) ) * &
-                                     I0_array(1:nn, 5:alpha_max + 4, 2)                                  
-  
-
-  global_amplitudes(1:nn,i)=amplitudes
-  global_rjs_idx(1:nn,i)=rjs_idx(1:nn)
-
-  global_rjs(1:nn, i)=rjs(1:nn)
-  ! global_atom_widths(1:nn,i)=atom_widths(1:nn)
-  !global_lim_buffer_array(1:nn,1:3,i)=lim_soft_array(1:nn,1:3)
-
-  ! global_I0_array(1:nn, 1:alpha_max + 4, 1:3,i)=I0_array(1:nn, 1:alpha_max + 4, 1:3)
-  ! global_g_aux_left_array (1:nn, 1:alpha_max,1:2,i)=g_aux_left_array (1:nn, 1:alpha_max, 1:2)
-  ! global_g_aux_right_array(1:nn, 1:alpha_max,1:2,i)=g_aux_right_array(1:nn, 1:alpha_max, 2:3)
-  ! global_M_left_array (1:nn, 1:alpha_max, 1:2,i) = M_left_array (1:nn, 1:alpha_max, 1:2) 
-  ! global_M_right_array(1:nn, 1:alpha_max, 1:2,i) = M_right_array(1:nn, 1:alpha_max, 2:3)
-  
-  !global_I_left_array(1:nn,1:alpha_max,i) =I_left_array
-  !global_I_right_array(1:nn,1:alpha_max,i)=I_right_array
-
-  exp_coeff_soft_array = I_left_array + I_right_array
-
-!   do j = 1, nn
-!     k2 = rjs_idx(j)
-!     exp_coeff(1:alpha_max, k2) = amplitudes(j) * exp_coeff_soft_array(j, 1:alpha_max)
-!   end do
-
-  !global_exp_buffer(1:nn,1:alpha_max,i)=exp_coeff_soft_array
-
-!       Contributions to derivatives
-  if( do_derivatives )then
-    g_aux_left_der_array(1:nn, 1:4, 1:2) = g_aux_der_array(lim_soft_array(:, 1:2), rjs(:), atom_widths(:), &
-              atom_width_scaling, "left")
-    g_aux_right_der_array(1:nn, 1:4, 2:3) = g_aux_der_array(lim_soft_array(:, 2:3), rjs(:), atom_widths(:), &
-         atom_width_scaling, "right")
-  do j = 1, 4
-    M_left_der_array(1:nn, j, 1) = I0_array(1:nn, j, 1) * g_aux_left_der_array(1:nn, j, 1) * vect(j)
-  end do
-  do j = 1, 4
-    M_left_der_array(1:nn, j, 2) = I0_array(1:nn, j, 2) * g_aux_left_der_array(1:nn, j, 2) * vect(j)
-  end do
-  do j = 1, 4
-    M_right_der_array(1:nn, j, 2) = I0_array(1:nn, j, 2) * g_aux_right_der_array(1:nn, j, 2) * vect(j)
-  end do
-  do j = 1, 4
-    M_right_der_array(1:nn, j, 3) = I0_array(1:nn, j, 3) * g_aux_right_der_array(1:nn, j, 3) * vect(j)
-  end do
-
-  I_left_der_array(1:nn, 1:alpha_max) = matmul( M_left_der_array(1:nn, 1:4, 2), transpose(A(1:alpha_max, 1:4)) ) * &
-                                        I0_array(1:nn, 5:alpha_max + 4, 2) - &
-                                        matmul( M_left_der_array(1:nn, 1:4, 1), transpose(A(1:alpha_max, 1:4)) ) * &
-                                        I0_array(1:nn, 5:alpha_max + 4, 1)
-  I_right_der_array(1:nn, 1:alpha_max) = matmul( M_right_der_array(1:nn, 1:4, 3), transpose(A(1:alpha_max, 1:4)) ) * &
-                                         I0_array(1:nn, 5:alpha_max + 4, 3) - &
-                                         matmul( M_right_der_array(1:nn, 1:4, 2), transpose(A(1:alpha_max, 1:4)) ) * &
-                                         I0_array(1:nn, 5:alpha_max + 4, 2)
-  exp_coeff_soft_der_array = I_left_der_array + I_right_der_array
-
-  
-  global_g_aux_left_array (1:nn, 1:alpha_max,1:2,i)=g_aux_left_der_array (1:nn, 1:alpha_max, 1:2)
-  global_g_aux_right_array(1:nn, 1:alpha_max,1:2,i)=g_aux_right_der_array(1:nn, 1:alpha_max, 2:3)
-  ! global_M_left_array (1:nn, 1:alpha_max, 1:2,i) = M_left_der_array (1:nn, 1:alpha_max, 1:2) 
-  ! global_M_right_array(1:nn, 1:alpha_max, 1:2,i) = M_right_der_array(1:nn, 1:alpha_max, 2:3)
-  !global_I_left_array(1:nn,1:alpha_max,i) =I_left_der_array
-  !global_I_right_array(1:nn,1:alpha_max,i)=I_right_der_array
-  !global_exp_buffer(1:nn,1:alpha_max,i)=exp_coeff_soft_der_array
-
-  ! do j = 1, nn
-  !   k2 = rjs_idx(j)
-  !   exp_coeff_der(1:alpha_max, k2) = amplitudes(j) * exp_coeff_soft_der_array(j, 1:alpha_max) + &
-  !                                    amplitudes_der(j) * exp_coeff_soft_array(j, 1:alpha_max)
-  ! end do
-   
-
-  deallocate( g_aux_left_der_array, g_aux_right_der_array, M_left_der_array, M_right_der_array, & 
-              I_left_der_array, I_right_der_array, exp_coeff_soft_der_array )
-
-  end if
-
-!        deallocate( soft_weights, buffer_weights )
-  deallocate( rjs, rjs_idx, atom_sigma_scaleds, s2s, atom_widths, lim_soft_array, &
-              I0_array, g_aux_left_array, g_aux_right_array, M_left_array, M_right_array, &
-              I_left_array, I_right_array, exp_coeff_soft_array, amplitudes, amplitudes_der, B)
-  else
-    deallocate( atom_widths )
-  end if
-
-
-  k = k + n_neigh(i)
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-end do
-
-write(*,*) "Buffer Region"
-
-k = 0
-do i = 1, n_sites
-  !!! BUFFER REGION
-  !     Temporarily allocate this as oversized array:
-  allocate( atom_widths(1:n_neigh(i)) )
-  atom_widths = 2.d0*sqrt(2.d0*log(2.d0))*(atom_sigma_in + atom_sigma_scaling*rjs_in(k+1:k+n_neigh(i)))
-
-  !     count number of atoms within buffer region
-  nn = count( rcut_soft_in < rcut_hard_in .and. mask(k+1:k+n_neigh(i)) .and. &
-              rjs_in(k+1:k+n_neigh(i)) + atom_widths(1:n_neigh(i)) > rcut_soft_in )
-  ! nn=0
-  ! do j=1,n_neigh(1)
-  !   tmp_aw=2.d0*sqrt(2.d0*log(2.d0))*(atom_sigma_in + atom_sigma_scaling*rjs_in(k+j))
-  !   if( rcut_soft_in < rcut_hard_in .and. mask(k+j) .and. &
-  !       rjs_in(k+j) + tmp_aw > rcut_soft_in) then
-  !     nn=nn+1
-  !   endif
-  ! enddo
-
-  !write(*,*) "Buffer_Region_site ", i, " nn is ", nn !, count( rcut_soft_in < rcut_hard_in .and. mask(k+1:k+n_neigh(i)) .and. &
-  ! rjs_in(k+1:k+n_neigh(i)) + atom_widths(1:n_neigh(i)) > rcut_soft_in )
-  
-  ! global_nn(i)=nn
-  ! writE(*,*) i, global_nn(i)
-  if( nn > 0 )then
-    !       These need to be allocated immediately
-    allocate( rjs(1:nn) )
-    allocate( rjs_idx(1:nn) )
-    !       make assignment between original neighbors and reduced neighbors
-    k2 = 1
-    do j = 1, n_neigh(i)
-      !          if( rjs_in(k+j) < rcut_hard_in .and. mask(k+j) )then
-      if( rcut_soft_in < rcut_hard_in .and. rjs_in(k+j) + atom_widths(j) > rcut_soft_in .and. mask(k+j) )then
-        rjs(k2) = rjs_in(k+j)
-        rjs_idx(k2) = k+j
-        k2 = k2 + 1
-      end if
-    end do
-    deallocate( atom_widths )
-    !       allocate arrays that depend on the number of neighbors inside soap cutoff
-    allocate( atom_sigma_scaleds(1:nn) )
-    allocate( s2s(1:nn) )    
-    allocate( atom_widths(1:nn) )
-    allocate( lim_buffer_array(1:nn, 1:3) )
-    !        allocate( soft_weights(1:nn) )
-    !        allocate( buffer_weights(1:nn) )
-    !       we might be able to get some extra speed by swapping the order of some of these dimensions
-    allocate( I0_array(1:nn, 1:max(7, alpha_max + 4), 1:3) )
-    allocate( g_aux_left_array(1:nn, 1:alpha_max, 1:2) )
-    allocate( g_aux_right_array(1:nn, 1:alpha_max, 2:3) ) ! note the 2:3 bounds here
-    allocate( M_left_array(1:nn, 1:alpha_max, 1:2) )
-    allocate( M_right_array(1:nn, 1:alpha_max, 2:3) ) ! note the 2:3 bounds here
-    allocate( I_left_array(1:nn, 1:alpha_max) )
-    allocate( I_right_array(1:nn, 1:alpha_max) )
-    !        allocate( exp_coeff_soft_array(1:nn, 1:alpha_max) )
-    allocate( exp_coeff_buffer_array(1:nn, 1:alpha_max) )
-    allocate( amplitudes(1:nn) )
-    allocate( amplitudes_der(1:nn) )
-    allocate( B(1:7, 1:nn) )
-    
-    if( do_derivatives )then
-      allocate( B_der(1:7, 1:nn) )
-      allocate( M_left_der_array(1:nn, 1:alpha_max, 1:2) )
-      allocate( M_right_der_array(1:nn, 1:alpha_max, 2:3) ) ! note the 2:3 bounds here
-      allocate( I_left_der_array(1:nn, 1:alpha_max) )
-      allocate( I_right_der_array(1:nn, 1:alpha_max) )
-      allocate( exp_coeff_buffer_der_array(1:nn, 1:alpha_max) )
-    end if 
-    !       define atom parameters in vector form
-    !   **************** New basis ******************
-    rjs = rjs/rcut_hard_in
-    !   *********************************************
-    atom_sigma_scaleds = atom_sigma + atom_sigma_scaling*rjs
-    s2s = atom_sigma_scaleds**2
-    atom_widths = 2.d0*sqrt(2.d0*log(2.d0))*atom_sigma_scaleds
-    atom_width_scaling = 2.d0*sqrt(2.d0*log(2.d0))*atom_sigma_scaling
-    !   ~~~~~~~~~~~~~~~ Amplitude ~~~~~~~~~~~~~~~~~~~~~~~
-    if( scaling_mode == "polynomial" )then
-      !         WARNING: the 1/atom_sigma_angular^2 term is missing from these amplitudes and needs to
-      !                  be taken into account in the corresponding part of the code.
-      !         WARNING2: These expressions here already assume rcut_hard = 1., so this parameter is missing
-      !                   from the expressions
-      if( amplitude_scaling == 0.d0 )then
-        amplitudes = 1.d0 / atom_sigma_scaleds
-        amplitudes_der = - atom_sigma_scaling / s2s 
-        !         else if( 1.d0 + 2.d0*rjs**3 - 3.d0*rjs**2 <= 1.d-10 )then ! FIX THESE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        !           amplitudes = 0.d0
-        !           amplitude_ders = 0.d0
-      else
-        if( amplitude_scaling == 1.d0 )then
-          amplitudes = 1.d0 / atom_sigma_scaleds * ( 1.d0 + 2.d0*rjs**3 - 3.d0*rjs**2 )
-          amplitudes_der = 6.d0 / atom_sigma_scaleds * (rjs**2 - rjs) &
-                          - atom_sigma_scaling / atom_sigma_scaleds * amplitudes
-        else
-          amplitudes = 1.d0 / atom_sigma_scaleds * ( 1.d0 + 2.d0*rjs**3 - 3.d0*rjs**2 )**amplitude_scaling
-          amplitudes_der = 6.d0*amplitude_scaling / atom_sigma_scaleds * (rjs**2 - rjs) &
-                       * ( 1.d0 + 2.d0*rjs**3 - 3.d0*rjs**2 )**(amplitude_scaling - 1.d0) &
-                       - atom_sigma_scaling / atom_sigma_scaleds * amplitudes
-        end if
-      end if
-    end if
-    !       The central atom needs to be scaled by central_weight
-    if( size(amplitudes) > 0 )then
-      if( rjs_idx(1) == k+1 )then
-        amplitudes(1) = central_weight * amplitudes(1) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        amplitudes_der(1) = central_weight * amplitudes_der(1) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      end if
-    end if
-    !       The radial enhancement adds a scaling corresponding to the integral of a Gaussian at the position
-    !       of atom j.
-  
-    if( radial_enhancement == 1 )then
-      amplitudes_der = amplitudes * ( 1.d0 + dsqrt(2.d0/pi)*atom_sigma_scaling ) + &
-                       amplitudes_der * ( rjs + dsqrt(2.d0/pi)*atom_sigma_scaleds )
-      amplitudes = amplitudes * ( rjs + dsqrt(2.d0/pi)*atom_sigma_scaleds )
-    else if( radial_enhancement == 2 )then
-      amplitudes_der = amplitudes*( 2.d0*rjs + 2.d0*atom_sigma_scaleds*atom_sigma_scaling + &
-                       dsqrt(8.d0/pi)*atom_sigma_scaleds + dsqrt(8.d0/pi)*rjs*atom_sigma_scaling ) + &
-                       amplitudes_der*( rjs**2 + s2s + dsqrt(8.d0/pi)*atom_sigma_scaleds*rjs )
-      amplitudes = amplitudes * ( rjs**2 + s2s + dsqrt(8.d0/pi)*atom_sigma_scaleds*rjs )
-    end if
-    !   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    !
-    !       NOTE: this below is design to be used with arrays that contain all the atoms. In some cases, the 
-    !       left_weights or right_weights might contain lots of zeros, in which case a speed up of close to x2
-    !       could be achieved by not doing all atoms but only those for which the weights are 1. 
-    !       One could refactor this code with the nn construction to have, e.g., nn_soft and nn_buffer
-    !       define arrays that give contribution of atoms within left and right of rcut_soft
-    !       Note that these are integer arrays (0|1 = .false.|.true.)
-    !        soft_weights = rjs - atom_widths < rcut_soft
-    !        nn_soft = count(soft_weights)
-    !        buffer_weights = rcut_soft < rcut_hard .and. rjs + atom_widths > rcut_soft
-    !        nn_buffer = count(buffer_weights
-    !
-    !       handle the central atom contribution; 
-    !       NOTE: I'M NOT SURE ABOUT THE NEED FOR THIS DO_CENTRAL TAG HERE, IT SHOULD BE HANDLED VIA THE CENTRAL_WEIGHT
-    if( .not. do_central )then
-      if( size(amplitudes) > 0 )then
-        if( rjs_idx(1) == k+1 )then
-          amplitudes(1) = 0.d0
-        end if
-      end if
-    end if
-    
-    !       Atoms within the buffer region
-    lim_buffer_array(:, 1) = max( rcut_soft, rjs - atom_widths ) ! lower limit left
-    lim_buffer_array(:, 2) = max( rjs, rcut_soft )               ! upper limit left / lower limit right
-    lim_buffer_array(:, 3) = min( rcut_hard, rjs + atom_widths ) ! upper limit right
-
-    ! global_lim_buffer_array(1:nn,1:3,i)=lim_buffer_array(1:nn,1:3)
-
-    I0_array = M_radial_poly_array(lim_buffer_array, max(7, alpha_max + 4), rcut_hard)
-
-    ! global_amplitudes(1:nn,i)=amplitudes
-    ! global_rjs_idx(1:nn,i)=rjs_idx(1:nn)
-    
-    !global_rjs(1:nn, i)=rjs(1:nn)
-    ! global_atom_widths(1:nn,i)=atom_widths(1:nn) 
-
-    call get_constant_poly_filter_coeff_array(rjs, atom_widths, rcut_soft, filter_width, 'left', B)
-    
-    !       We should try to figure out a more "vectorized way" of doing this
-    do k2 = 1, nn
-      M_left_array(k2, 1:7, 1) = matmul( -B(1:7, k2), M_radial_monomial(lim_buffer_array(k2, 1), 6) ) * &
-      I0_array(k2, 1:7, 1)
-      M_left_array(k2, 1:7, 2) = matmul( -B(1:7, k2), M_radial_monomial(lim_buffer_array(k2, 2), 6) ) * &
-      I0_array(k2, 1:7, 2)
-      !global_M_rad_mono(k2,1:7,1:7,1,i)=M_radial_monomial(lim_buffer_array(k2, 1), 6)
-    end do
-    
-    ! do k2=1,7
-    !   global_B_left(1:nn,k2,i)=B(k2,1:nn)
-    ! enddo
-    
-    I_left_array(1:nn, 1:alpha_max) = matmul( M_left_array(1:nn, 1:7, 2), transpose(A(1:alpha_max, 1:7)) ) * &
-                                      I0_array(1:nn, 5:alpha_max + 4, 2) - &
-                                      matmul( M_left_array(1:nn, 1:7, 1), transpose(A(1:alpha_max, 1:7)) ) * &
-                                      I0_array(1:nn, 5:alpha_max + 4, 1)
-    
-    call get_constant_poly_filter_coeff_array(rjs, atom_widths, rcut_soft, filter_width, 'right', B)
-    
-    !       We should try to figure out a more "vectorized way" of doing this
-    do k2 = 1, nn
-      M_right_array(k2, 1:7, 2) = matmul( -B(1:7, k2), M_radial_monomial(lim_buffer_array(k2, 2), 6) ) * &
-      I0_array(k2, 1:7, 2)
-      M_right_array(k2, 1:7, 3) = matmul( -B(1:7, k2), M_radial_monomial(lim_buffer_array(k2, 3), 6) ) * &
-      I0_array(k2, 1:7, 3)
-      !global_M_rad_mono(k2,1:7,1:7,2,i) = M_radial_monomial(lim_buffer_array(k2, 2), 6)
-      !global_M_rad_mono(k2,1:7,1:7,3,i) = M_radial_monomial(lim_buffer_array(k2, 3), 6)
-    end do
-    
-    ! do k2=1,7
-    !   global_B_right(1:nn,k2,i)=B(k2,1:nn)
-    ! enddo
-
-    
-    I_right_array(1:nn, 1:alpha_max) = matmul( M_right_array(1:nn, 1:7, 3), transpose(A(1:alpha_max, 1:7)) ) * &
-                                       I0_array(1:nn, 5:alpha_max + 4, 3) - &
-                                       matmul( M_right_array(1:nn, 1:7, 2), transpose(A(1:alpha_max, 1:7)) ) * &
-                                       I0_array(1:nn, 5:alpha_max + 4, 2)
-    exp_coeff_buffer_array = I_left_array + I_right_array
-
-    !global_exp_buffer(1:nn,1:alpha_max,i)=exp_coeff_buffer_array
-    !global_I_left_array(1:nn,1:alpha_max,i)=I_left_array
-    !global_I_right_array(1:nn,1:alpha_max,i)=I_right_array
-    
-    !global_I0_array(1:nn, 1:max(7, alpha_max + 4), 1:3,i)=I0_array(1:nn, 1:max(7, alpha_max + 4), 1:3)
-    !global_M_left_array (1:nn, 1:alpha_max, 1:2,i) =M_left_array (1:nn, 1:alpha_max, 1:2) 
-    !global_M_right_array(1:nn, 1:alpha_max, 1:2,i) =M_right_array(1:nn, 1:alpha_max, 2:3) 
-
-    ! do j = 1, nn
-    !   k2 = rjs_idx(j)
-    !   exp_coeff(1:alpha_max, k2) = exp_coeff(1:alpha_max, k2) + &
-    !   amplitudes(j) * exp_coeff_buffer_array(j, 1:alpha_max)
-    ! end do
-    
-    !       Contribution to derivatives
-    if( do_derivatives )then      
-      call get_constant_poly_filter_coeff_der_array(rjs, atom_widths, atom_width_scaling, rcut_soft, &
-                                                    filter_width, 'left', B_der)
-    ! do k2=1,7
-    !   global_B_left(1:nn,k2,i)=B_der(k2,1:nn)
-    ! enddo
-      !         We should try to figure out a more "vectorized way" of doing this
-      do k2 = 1, nn
-        M_left_der_array(k2, 1:7, 1) = I0_array(k2, 1:7, 1) * &
-                                   matmul( -B_der(1:7, k2), M_radial_monomial(lim_buffer_array(k2, 1), 6) )
-                                   M_left_der_array(k2, 1:7, 2) = I0_array(k2, 1:7, 2) * &
-                                   matmul( -B_der(1:7, k2), M_radial_monomial(lim_buffer_array(k2, 2), 6) )
-      end do
-      I_left_der_array(1:nn, 1:alpha_max) = matmul( M_left_der_array(1:nn, 1:7, 2), transpose(A(1:alpha_max, 1:7)) ) * &
-                                               I0_array(1:nn, 5:alpha_max + 4, 2) - &
-                                               matmul( M_left_der_array(1:nn, 1:7, 1), transpose(A(1:alpha_max, 1:7)) ) * &
-                                              I0_array(1:nn, 5:alpha_max + 4, 1)
-
-      call get_constant_poly_filter_coeff_der_array(rjs, atom_widths, atom_width_scaling, rcut_soft, &
-                               filter_width, 'right', B_der)
-    ! do k2=1,7
-    !   global_B_right(1:nn,k2,i)=B_der(k2,1:nn)
-    ! enddo
-      !         We should try to figure out a more "vectorized way" of doing this
-      do k2 = 1, nn
-        M_right_der_array(k2, 1:7, 2) = I0_array(k2, 1:7, 2) * &
-                                  matmul( -B_der(1:7, k2), M_radial_monomial(lim_buffer_array(k2, 2), 6) )
-        M_right_der_array(k2, 1:7, 3) = I0_array(k2, 1:7, 3) * &
-                                  matmul( -B_der(1:7, k2), M_radial_monomial(lim_buffer_array(k2, 3), 6) )
-      end do
-      I_right_der_array(1:nn, 1:alpha_max) = matmul( M_right_der_array(1:nn, 1:7, 3), transpose(A(1:alpha_max, 1:7)) ) * &
-                                       I0_array(1:nn, 5:alpha_max + 4, 3) - &
-                                       matmul( M_right_der_array(1:nn, 1:7, 2), transpose(A(1:alpha_max, 1:7)) ) * &
-                                       I0_array(1:nn, 5:alpha_max + 4, 2)
-
-      
-      exp_coeff_buffer_der_array = I_left_der_array + I_right_der_array
-      ! global_M_left_array (1:nn, 1:alpha_max, 1:2,i) =M_left_der_array (1:nn, 1:alpha_max, 1:2) 
-      ! global_M_right_array(1:nn, 1:alpha_max, 1:2,i) =M_right_der_array(1:nn, 1:alpha_max, 2:3) 
-      ! global_I_left_array(1:nn,1:alpha_max,i)=I_left_der_array
-      ! global_I_right_array(1:nn,1:alpha_max,i)=I_right_der_array
-      !global_exp_buffer(1:nn,1:alpha_max,i)=exp_coeff_buffer_der_array
-      ! do j = 1, nn
-      !   k2 = rjs_idx(j)
-      !   exp_coeff_der(1:alpha_max, k2) = exp_coeff_der(1:alpha_max, k2) + &
-      !                              amplitudes(j) * exp_coeff_buffer_der_array(j, 1:alpha_max) + &
-      !                              amplitudes_der(j) * exp_coeff_buffer_array(j, 1:alpha_max)
-      ! end do
-      deallocate( M_left_der_array, M_right_der_array, I_left_der_array, I_right_der_array, &
-                  exp_coeff_buffer_der_array, B_der )
-    end if
-    !       deallocate( soft_weights, buffer_weights )
-    deallocate( rjs, rjs_idx, atom_sigma_scaleds, s2s, atom_widths, lim_buffer_array, &
-                I0_array, g_aux_left_array, g_aux_right_array, M_left_array, M_right_array, &
-                I_left_array, I_right_array, amplitudes, amplitudes_der, B, exp_coeff_buffer_array )
-  else
-    deallocate( atom_widths )
-  end if  
-  
-  k = k + n_neigh(i)
-
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-end do
 
 ! stop
 if( scaling_mode == "polynomial" )then
   num_scaling_mode=1000
 endif
 
-st_g_g_aux_a=max_nn*alpha_max*2*n_sites*c_double
-call gpu_malloc_all(global_g_aux_left_array_d,  st_g_g_aux_a,gpu_stream)
-call gpu_malloc_all(global_g_aux_right_array_d, st_g_g_aux_a,gpu_stream)
-call cpy_htod(c_loc(global_g_aux_left_array), global_g_aux_left_array_d,  st_g_g_aux_a,gpu_stream)
-call cpy_htod(c_loc(global_g_aux_right_array),global_g_aux_right_array_d, st_g_g_aux_a,gpu_stream)
+! st_g_g_aux_a=max_nn*alpha_max*2*n_sites*c_double
+! call gpu_malloc_all(global_g_aux_left_array_d,  st_g_g_aux_a,gpu_stream)
+! call gpu_malloc_all(global_g_aux_right_array_d, st_g_g_aux_a,gpu_stream)
+! call cpy_htod(c_loc(global_g_aux_left_array), global_g_aux_left_array_d,  st_g_g_aux_a,gpu_stream)
+! call cpy_htod(c_loc(global_g_aux_right_array),global_g_aux_right_array_d, st_g_g_aux_a,gpu_stream)
 
-st_g_rjs=max_nn*n_sites*c_double 
-st_g_a_w=max_nn*n_sites*c_double 
+! st_g_rjs=max_nn*n_sites*c_double 
+! st_g_a_w=max_nn*n_sites*c_double 
 
-call gpu_malloc_all(global_atom_widths_d, st_g_a_w,gpu_stream)
-call gpu_malloc_all(global_rjs_d, st_g_rjs,gpu_stream)
-call cpy_htod(c_loc(global_atom_widths),global_atom_widths_d, st_g_a_w,gpu_stream)
-call cpy_htod(c_loc(global_rjs),global_rjs_d, st_g_rjs,gpu_stream)
+! call gpu_malloc_all(global_atom_widths_d, st_g_a_w,gpu_stream)
+! call gpu_malloc_all(global_rjs_d, st_g_rjs,gpu_stream)
+! call cpy_htod(c_loc(global_atom_widths),global_atom_widths_d, st_g_a_w,gpu_stream)
+! call cpy_htod(c_loc(global_rjs),global_rjs_d, st_g_rjs,gpu_stream)
 
-st_g_M_rad_m=max_nn*7*7*3*n_sites*c_double 
-call gpu_malloc_all(global_M_rad_mono_d,st_g_M_rad_m,gpu_stream)
-call cpy_htod(c_loc(global_M_rad_mono),global_M_rad_mono_d,st_g_M_rad_m,gpu_stream)
+! st_g_M_rad_m=max_nn*7*7*3*n_sites*c_double 
+! call gpu_malloc_all(global_M_rad_mono_d,st_g_M_rad_m,gpu_stream)
+! call cpy_htod(c_loc(global_M_rad_mono),global_M_rad_mono_d,st_g_M_rad_m,gpu_stream)
 
-st_g_B=max_nn*7*n_sites*c_double
-call gpu_malloc_all(global_B_left_d,st_g_B,gpu_stream)
-call gpu_malloc_all(global_B_right_d,st_g_B,gpu_stream)
+! st_g_B=max_nn*7*n_sites*c_double
+! call gpu_malloc_all(global_B_left_d,st_g_B,gpu_stream)
+! call gpu_malloc_all(global_B_right_d,st_g_B,gpu_stream)
 
-call cpy_htod(c_loc(global_B_left),global_B_left_d,st_g_B,gpu_stream)
-call cpy_htod(c_loc(global_B_right),global_B_right_d,st_g_B,gpu_stream)
+! call cpy_htod(c_loc(global_B_left),global_B_left_d,st_g_B,gpu_stream)
+! call cpy_htod(c_loc(global_B_right),global_B_right_d,st_g_B,gpu_stream)
 
-st_g_lim_b=max_nn*3*n_sites*c_double
-call gpu_malloc_all(global_lim_buffer_array_d,st_g_lim_b,gpu_stream)
-call cpy_htod(c_loc(global_lim_buffer_array),global_lim_buffer_array_d,st_g_lim_b,gpu_stream)
+! st_g_lim_b=max_nn*3*n_sites*c_double
+! call gpu_malloc_all(global_lim_buffer_array_d,st_g_lim_b,gpu_stream)
+! call cpy_htod(c_loc(global_lim_buffer_array),global_lim_buffer_array_d,st_g_lim_b,gpu_stream)
 
-st_g_I0_a=max_nn*max(7, alpha_max + 4)*3*n_sites*c_double
-st_g_M_l_a=max_nn*alpha_max*2*n_sites*c_double
-st_g_M_r_a=max_nn*alpha_max*2*n_sites*c_double
+! st_g_I0_a=max_nn*max(7, alpha_max + 4)*3*n_sites*c_double
+! st_g_M_l_a=max_nn*alpha_max*2*n_sites*c_double
+! st_g_M_r_a=max_nn*alpha_max*2*n_sites*c_double
 
-call gpu_malloc_all(global_I0_array_d,st_g_I0_a,gpu_stream)
-call gpu_malloc_all(global_M_left_array_d,st_g_M_l_a,gpu_stream)
-call gpu_malloc_all(global_M_right_array_d,st_g_M_r_a,gpu_stream)
+! call gpu_malloc_all(global_I0_array_d,st_g_I0_a,gpu_stream)
+! call gpu_malloc_all(global_M_left_array_d,st_g_M_l_a,gpu_stream)
+! call gpu_malloc_all(global_M_right_array_d,st_g_M_r_a,gpu_stream)
 
-call cpy_htod(c_loc(global_I0_array),global_I0_array_d,st_g_I0_a,gpu_stream)
-call cpy_htod(c_loc(global_M_left_array),global_M_left_array_d,st_g_M_l_a,gpu_stream)
-call cpy_htod(c_loc(global_M_right_array),global_M_right_array_d,st_g_M_r_a,gpu_stream)
+! call cpy_htod(c_loc(global_I0_array),global_I0_array_d,st_g_I0_a,gpu_stream)
+! call cpy_htod(c_loc(global_M_left_array),global_M_left_array_d,st_g_M_l_a,gpu_stream)
+! call cpy_htod(c_loc(global_M_right_array),global_M_right_array_d,st_g_M_r_a,gpu_stream)
 
 
-st_g_I_l=max_nn*alpha_max*n_sites*c_double
-st_g_I_r=max_nn*alpha_max*n_sites*c_double
-st_g_e_b=max_nn*alpha_max*n_sites*c_double
+! st_g_I_l=max_nn*alpha_max*n_sites*c_double
+! st_g_I_r=max_nn*alpha_max*n_sites*c_double
+! st_g_e_b=max_nn*alpha_max*n_sites*c_double
 
-st_g_a=max_nn*n_sites*c_double
-st_g_rjs_idx=max_nn*n_sites*c_int
-st_g_nn=n_sites*c_int
+! st_g_a=max_nn*n_sites*c_double
+! st_g_rjs_idx=max_nn*n_sites*c_int
+! st_g_nn=n_sites*c_int
 
-call gpu_malloc_all(global_I_left_array_d,st_g_I_l, gpu_stream)
-call gpu_malloc_all(global_I_right_array_d,st_g_I_r, gpu_stream)
-call gpu_malloc_all(global_exp_buffer_d, st_g_e_b, gpu_stream)
+! call gpu_malloc_all(global_I_left_array_d,st_g_I_l, gpu_stream)
+! call gpu_malloc_all(global_I_right_array_d,st_g_I_r, gpu_stream)
+! call gpu_malloc_all(global_exp_buffer_d, st_g_e_b, gpu_stream)
 
-call gpu_malloc_all(global_amplitudes_d,st_g_a, gpu_stream)
-call gpu_malloc_all(global_rjs_idx_d, st_g_rjs_idx, gpu_stream)
-call gpu_malloc_all(global_nn_d, st_g_nn, gpu_stream)
+! call gpu_malloc_all(global_amplitudes_d,st_g_a, gpu_stream)
+! call gpu_malloc_all(global_rjs_idx_d, st_g_rjs_idx, gpu_stream)
+! call gpu_malloc_all(global_nn_d, st_g_nn, gpu_stream)
 
-call cpy_htod(c_loc(global_I_left_array), global_I_left_array_d,st_g_I_l, gpu_stream)
-call cpy_htod(c_loc(global_I_right_array), global_I_right_array_d,st_g_I_r, gpu_stream)
-call cpy_htod(c_loc(global_exp_buffer), global_exp_buffer_d,st_g_e_b, gpu_stream)
+! call cpy_htod(c_loc(global_I_left_array), global_I_left_array_d,st_g_I_l, gpu_stream)
+! call cpy_htod(c_loc(global_I_right_array), global_I_right_array_d,st_g_I_r, gpu_stream)
+! call cpy_htod(c_loc(global_exp_buffer), global_exp_buffer_d,st_g_e_b, gpu_stream)
 
-call cpy_htod(c_loc(global_amplitudes), global_amplitudes_d,st_g_a, gpu_stream)
-call cpy_htod(c_loc( global_rjs_idx), global_rjs_idx_d, st_g_rjs_idx, gpu_stream)
-call cpy_htod(c_loc( global_nn), global_nn_d, st_g_nn, gpu_stream)
+! call cpy_htod(c_loc(global_amplitudes), global_amplitudes_d,st_g_a, gpu_stream)
+! call cpy_htod(c_loc( global_rjs_idx), global_rjs_idx_d, st_g_rjs_idx, gpu_stream)
+! call cpy_htod(c_loc( global_nn), global_nn_d, st_g_nn, gpu_stream)
 
 
 n_rjs_in=size(rjs_in,1)
@@ -1520,6 +964,12 @@ call  cpy_dtoh(exp_coeff_der_d,c_loc(exp_coeff_der),st_size_exp_coeff,gpu_stream
 call gpu_free_async(exp_coeff_d, gpu_stream)
 call gpu_free_async(exp_coeff_der_d, gpu_stream)
 
+call gpu_device_synchronize()
+call cpu_time(f_time(2))
+write(*,*)
+write(*,*) "Time", f_time(2)-f_time(1)
+write(*,*)
+ 
 call gpu_stream_synchronize(gpu_stream) ! call gpu_device_synchronize()
 call destroy_cublas_handle(cublas_handle, gpu_stream)
 call gpu_device_reset()
