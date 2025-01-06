@@ -1062,11 +1062,16 @@ do i = 1, n_sites
                                          I0_array(1:nn, 5:alpha_max + 4, 2)
   exp_coeff_soft_der_array = I_left_der_array + I_right_der_array
 
-  do j = 1, nn
-    k2 = rjs_idx(j)
-    exp_coeff_der(1:alpha_max, k2) = amplitudes(j) * exp_coeff_soft_der_array(j, 1:alpha_max) + &
-                                    amplitudes_der(j) * exp_coeff_soft_array(j, 1:alpha_max)
-  end do
+  !global_I_left_array(1:nn,1:alpha_max,i) =I_left_der_array
+  !global_I_right_array(1:nn,1:alpha_max,i)=I_right_der_array
+  !global_exp_buffer(1:nn,1:alpha_max,i)=exp_coeff_soft_der_array
+
+  ! do j = 1, nn
+  !   k2 = rjs_idx(j)
+  !   exp_coeff_der(1:alpha_max, k2) = amplitudes(j) * exp_coeff_soft_der_array(j, 1:alpha_max) + &
+  !                                    amplitudes_der(j) * exp_coeff_soft_array(j, 1:alpha_max)
+  ! end do
+   
 
   deallocate( g_aux_left_der_array, g_aux_right_der_array, M_left_der_array, M_right_der_array, & 
               I_left_der_array, I_right_der_array, exp_coeff_soft_der_array )
