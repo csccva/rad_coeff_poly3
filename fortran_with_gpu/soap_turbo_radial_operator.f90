@@ -728,23 +728,23 @@ type(c_ptr) :: global_amplitudes_d, global_exp_buffer_d
 type(c_ptr) :: global_I_left_array_d, global_I_right_array_d
 type(c_ptr) :: global_rjs_idx_d, global_nn_d
 type(c_ptr) :: global_I0_array_d, global_M_left_array_d, global_M_right_array_d
-type(c_ptr) :: global_B_right_d,global_B_left_d
-type(c_ptr) :: global_lim_buffer_array_d, global_M_rad_mono_d
-type(c_ptr) :: global_atom_widths_d, global_rjs_d
-real(c_double), allocatable :: global_I_left_array(:,:,:)
-real(c_double), allocatable :: global_I_right_array(:,:,:)
-real(c_double), allocatable :: global_exp_buffer(:,:,:)
-real(c_double), allocatable :: global_amplitudes(:,:)
-integer(c_int), allocatable :: global_rjs_idx(:,:),global_nn(:)
-real(c_double), allocatable :: global_I0_array(:,:,:,:)
-real(c_double), allocatable :: global_M_left_array(:,:,:,:),global_M_right_array(:,:,:,:)
-integer(c_size_t) :: st_g_rjs, st_g_a_w,st_g_g_aux_a
-integer(c_size_t) :: st_g_I0_a, st_g_M_l_a, st_g_M_r_a,st_g_lim_b,st_g_B,st_g_M_rad_m
-real(c_double), allocatable :: global_M_rad_mono(:,:,:,:,:)
-real(c_double), allocatable :: global_lim_buffer_array(:,:,:),global_B_right(:,:,:),global_B_left(:,:,:)
-real(c_double), allocatable :: global_atom_widths(:,:),global_rjs(:,:)
-real(c_double), allocatable :: global_g_aux_left_array(:,:,:,:),global_g_aux_right_array(:,:,:,:)
-type(c_ptr) :: global_g_aux_left_array_d,global_g_aux_right_array_d
+!type(c_ptr) :: global_B_right_d,global_B_left_d
+!type(c_ptr) :: global_lim_buffer_array_d, global_M_rad_mono_d
+!type(c_ptr) :: global_atom_widths_d, global_rjs_d
+!real(c_double), allocatable :: global_I_left_array(:,:,:)
+!real(c_double), allocatable :: global_I_right_array(:,:,:)
+!real(c_double), allocatable :: global_exp_buffer(:,:,:)
+!real(c_double), allocatable :: global_amplitudes(:,:)
+!integer(c_int), allocatable :: global_rjs_idx(:,:),global_nn(:)
+!real(c_double), allocatable :: global_I0_array(:,:,:,:)
+!real(c_double), allocatable :: global_M_left_array(:,:,:,:),global_M_right_array(:,:,:,:)
+!integer(c_size_t) :: st_g_rjs, st_g_a_w,st_g_g_aux_a
+!integer(c_size_t) :: st_g_I0_a, st_g_M_l_a, st_g_M_r_a,st_g_lim_b,st_g_B,st_g_M_rad_m
+!real(c_double), allocatable :: global_M_rad_mono(:,:,:,:,:)
+!real(c_double), allocatable :: global_lim_buffer_array(:,:,:),global_B_right(:,:,:),global_B_left(:,:,:)
+!real(c_double), allocatable :: global_atom_widths(:,:),global_rjs(:,:)
+!real(c_double), allocatable :: global_g_aux_left_array(:,:,:,:),global_g_aux_right_array(:,:,:,:)
+!type(c_ptr) :: global_g_aux_left_array_d,global_g_aux_right_array_d
 real*8 :: f_time(2)=0.d0
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 rank=0
@@ -937,8 +937,10 @@ st_size_exp_coeff_der=n_exp_coeff_der*sizeof(exp_coeff_der(1,1))
 call gpu_malloc_all(exp_coeff_d,st_size_exp_coeff, gpu_stream)
 call gpu_malloc_all(exp_coeff_der_d,st_size_exp_coeff_der, gpu_stream)
 
-call  cpy_htod(c_loc(exp_coeff),exp_coeff_d,st_size_exp_coeff, gpu_stream)
-call  cpy_htod(c_loc(exp_coeff_der),exp_coeff_der_d,st_size_exp_coeff,gpu_stream)
+!call  cpy_htod(c_loc(exp_coeff),exp_coeff_d,st_size_exp_coeff, gpu_stream)
+!call  cpy_htod(c_loc(exp_coeff_der),exp_coeff_der_d,st_size_exp_coeff,gpu_stream)
+call gpu_memset_async(exp_coeff_d,0,st_size_exp_coeff, gpu_stream)
+call gpu_memset_async(exp_coeff_der_d,0,st_size_exp_coeff, gpu_stream)
 
 call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, &
                 exp_coeff_der_d, n_exp_coeff,n_exp_coeff_der,rcut_hard_in,rcut_soft_in, &
@@ -950,12 +952,12 @@ call gpu_radial_expansion_coefficients_poly3operator(exp_coeff_d, &
                 radial_enhancement, c_do_central, &
                 rcut_soft, rcut_hard, filter_width, &
                 A_d, &
-                global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d, &
-                global_rjs_idx_d, max_nn, global_nn_d, &
-                global_I0_array_d, global_M_left_array_d, global_M_right_array_d, &
-                global_lim_buffer_array_d, global_B_right_d, global_B_left_d, global_M_rad_mono_d, &
-                global_rjs_d, global_atom_widths_d, &
-                global_g_aux_left_array_d, global_g_aux_right_array_d, &
+                !global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d, &
+                !global_rjs_idx_d, max_nn, global_nn_d, &
+                !global_I0_array_d, global_M_left_array_d, global_M_right_array_d, &
+                !global_lim_buffer_array_d, global_B_right_d, global_B_left_d, global_M_rad_mono_d, &
+                !global_rjs_d, global_atom_widths_d, &
+                !global_g_aux_left_array_d, global_g_aux_right_array_d, &
                 gpu_stream) 
 
 call  cpy_dtoh(exp_coeff_d,c_loc(exp_coeff),st_size_exp_coeff,gpu_stream)

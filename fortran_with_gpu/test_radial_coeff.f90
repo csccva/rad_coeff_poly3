@@ -44,7 +44,7 @@ program test_radial
 !  do_derivatives = .false.
 !**************************************
 
-  n_sites = 10000
+  n_sites = 1000
   allocate( n_neigh(1:n_sites) )
   n_neigh = 50
   allocate( rjs_in(1:n_sites*n_neigh(1)) )
@@ -81,7 +81,10 @@ program test_radial
 ! ! Just to make sure the calculation is done with -O3
 ! !  write(*,*) exp_coeff(1:alpha_max, 1)
 !   write(*,*) t2-t1, "seconds for poly3"
+ 
 
+  exp_coeff = 0.d0
+  exp_coeff_der = 0.d0
 
 ! Using operator 
   call cpu_time(t1)
@@ -99,7 +102,7 @@ program test_radial
   exp_coeff_cp = exp_coeff
   exp_coeff_der_cp = exp_coeff_der
 
-
+ 
 ! Using any other version of the radial coeff. subroutine
  call cpu_time(t1)
  call get_radial_expansion_coefficients_poly3operator_gpu(n_sites, n_neigh, rjs_in, alpha_max, &
@@ -137,5 +140,12 @@ program test_radial
 !     write(*,*) i,j, W(i,j)
 !   enddo
 ! enddo
+!  open(unit=937,file="test.txt" , status="unknown")
+!  do i=1,n_sites
+!   do j=1,alpha_max
+!     write(937,*) i,j, exp_coeff(j,i), exp_coeff_cp(j,i), exp_coeff_der(j,i), exp_coeff_der_cp(j,i)
+!   enddo
+!  enddo
+!  close(937)
 
 end program

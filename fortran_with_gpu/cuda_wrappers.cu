@@ -2957,12 +2957,12 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
                          double central_weight,  bool do_central,  bool c_do_derivatives,
                          double rcut_soft, double rcut_hard, double filter_width,
                          double *A,
-                         double *global_I_left_array, double *global_I_right_array, double *global_amplitudes, double *global_exp_buffer,
-                         int *global_rjs_idx, int max_nn, int *global_nn,
-                         double *global_I0_array, double *global_M_left_array, double *global_M_right_array,
-                         double *global_lim_buffer_array, double *global_B_right, double *global_B_left, double *global_M_rad_mono,
-                         double *global_rjs, double *global_atom_widths,
-                         double *global_g_aux_left_array, double *global_g_aux_right_array,
+                        //  double *global_I_left_array, double *global_I_right_array, double *global_amplitudes, double *global_exp_buffer,
+                        //  int *global_rjs_idx, int max_nn, int *global_nn,
+                        //  double *global_I0_array, double *global_M_left_array, double *global_M_right_array,
+                        //  double *global_lim_buffer_array, double *global_B_right, double *global_B_left, double *global_M_rad_mono,
+                        //  double *global_rjs, double *global_atom_widths,
+                        //  double *global_g_aux_left_array, double *global_g_aux_right_array,
                          int radial_enhancement) {
   int tid = threadIdx.x;  // Thread ID within block (same as lane in this case)
   int i=blockIdx.x;
@@ -3049,59 +3049,59 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
     double g_aux_left_array[LOCAL_NN*4*2];
     double g_aux_right_array[LOCAL_NN*4*2];
 
-    int i_t=tid;
-    for(int il=0;il<local_nn;il++){
-      if(i_t<nn){
-        // int idx=global_rjs_idx[i_t+max_nn*i];
-        // local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
-        // local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
-        // amplitudes[il]=global_amplitudes[i_t+max_nn*i];
-        // atom_widths[il]=global_atom_widths[i_t+max_nn*i];
-        for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
-          //I_left_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
-          //I_right_array[il+i_alph*LOCAL_NN] = global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
-          //exp_coeff_buffer_array[il+i_alph*LOCAL_NN]=global_exp_buffer[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
-          //M_left_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-          //M_left_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-          //M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-          //M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+    // int i_t=tid;
+    // for(int il=0;il<local_nn;il++){
+    //   if(i_t<nn){
+    //     // int idx=global_rjs_idx[i_t+max_nn*i];
+    //     // local_rjs_idx[il]=global_rjs_idx[i_t+max_nn*i];
+    //     // local_rjs[il]=rjs_in[idx-1]/rcut_hard_in;  //global_rjs[i_t+max_nn*i];
+    //     // amplitudes[il]=global_amplitudes[i_t+max_nn*i];
+    //     // atom_widths[il]=global_atom_widths[i_t+max_nn*i];
+    //     for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
+    //       //I_left_array[il+i_alph*LOCAL_NN]  = global_I_left_array [i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+    //       //I_right_array[il+i_alph*LOCAL_NN] = global_I_right_array[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+    //       //exp_coeff_buffer_array[il+i_alph*LOCAL_NN]=global_exp_buffer[i_t+(i_alph+i*ALPHA_MAX)*max_nn];
+    //       //M_left_array [il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+    //       //M_left_array [il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+    //       //M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+    //       //M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=global_M_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
         
-          // if(i_alph<4){
-          //   g_aux_left_array [il+LOCAL_NN*(0*4+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-          //   g_aux_left_array [il+LOCAL_NN*(1*4+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-          //   g_aux_right_array[il+LOCAL_NN*(0*4+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
-          //   g_aux_right_array[il+LOCAL_NN*(1*4+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
-          // }
-          // lim_soft_array[il+0*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
-          // lim_soft_array[il+1*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
-          // lim_soft_array[il+2*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
-        }
-        for(int i_s=0;i_s<7;i_s++){
-          //B_r[i_s+il*7]=global_B_right[i_t+max_nn*(i_s+7*i)];
-          //B_l[i_s+il*7]=global_B_left[i_t+max_nn*(i_s+7*i)];
-          for(int i_z=0;i_z<7;i_z++){
-            //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*0))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(0+i*3)))];
-            //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*1))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(1+i*3)))];
-            //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*2))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(2+i*3)))];
-          }
-        }
-      }
-      i_t+=WARP_SIZE;
-    }
+    //       // if(i_alph<4){
+    //       //   g_aux_left_array [il+LOCAL_NN*(0*4+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+    //       //   g_aux_left_array [il+LOCAL_NN*(1*4+i_alph)]=global_g_aux_left_array [i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+    //       //   g_aux_right_array[il+LOCAL_NN*(0*4+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(0+i*2)*ALPHA_MAX)*max_nn];
+    //       //   g_aux_right_array[il+LOCAL_NN*(1*4+i_alph)]=global_g_aux_right_array[i_t+(i_alph+(1+i*2)*ALPHA_MAX)*max_nn];
+    //       // }
+    //       // lim_soft_array[il+0*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+0)];
+    //       // lim_soft_array[il+1*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+1)];
+    //       // lim_soft_array[il+2*LOCAL_NN]=global_lim_buffer_array[i_t+max_nn*(i*3+2)];
+    //     }
+    //     for(int i_s=0;i_s<7;i_s++){
+    //       //B_r[i_s+il*7]=global_B_right[i_t+max_nn*(i_s+7*i)];
+    //       //B_l[i_s+il*7]=global_B_left[i_t+max_nn*(i_s+7*i)];
+    //       for(int i_z=0;i_z<7;i_z++){
+    //         //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*0))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(0+i*3)))];
+    //         //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*1))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(1+i*3)))];
+    //         //M_rad_mono[il+LOCAL_NN*(i_z+7*(i_s+7*2))]=global_M_rad_mono[i_t+max_nn*(i_z+7*(i_s+7*(2+i*3)))];
+    //       }
+    //     }
+    //   }
+    //   i_t+=WARP_SIZE;
+    // }
 
-    i_t=tid;
-    for(int il=0;il<local_nn;il++){
-      if(i_t<nn){
-        for(int i_alph=0;i_alph<a_max;i_alph++){
-          // I0_array[il+(i_alph+0*a_max)*LOCAL_NN] = global_I0_array[i_t+(i_alph+(i*3+0)*a_max)*max_nn];
-          // I0_array[il+(i_alph+1*a_max)*LOCAL_NN] = global_I0_array[i_t+(i_alph+(i*3+1)*a_max)*max_nn];
-          // I0_array[il+(i_alph+2*a_max)*LOCAL_NN] = global_I0_array[i_t+(i_alph+(i*3+2)*a_max)*max_nn];
-        }
-      }
-      i_t+=WARP_SIZE;
-    }
+    // i_t=tid;
+    // for(int il=0;il<local_nn;il++){
+    //   if(i_t<nn){
+    //     for(int i_alph=0;i_alph<a_max;i_alph++){
+    //       // I0_array[il+(i_alph+0*a_max)*LOCAL_NN] = global_I0_array[i_t+(i_alph+(i*3+0)*a_max)*max_nn];
+    //       // I0_array[il+(i_alph+1*a_max)*LOCAL_NN] = global_I0_array[i_t+(i_alph+(i*3+1)*a_max)*max_nn];
+    //       // I0_array[il+(i_alph+2*a_max)*LOCAL_NN] = global_I0_array[i_t+(i_alph+(i*3+2)*a_max)*max_nn];
+    //     }
+    //   }
+    //   i_t+=WARP_SIZE;
+    // }
     
-        for(int il=0;il<local_nn;il++){
+    for(int il=0;il<local_nn;il++){
       atom_sigma_scaleds[il]=atom_sigma+atom_sigma_scaling*local_rjs[il];
       s2s[il]=atom_sigma_scaleds[il]*atom_sigma_scaleds[il];
       atom_widths[il] = 2.0*sqrt(2.0*log(2.0))*atom_sigma_scaleds[il];
@@ -3226,15 +3226,9 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
       double M_right_der_array[2 * ALPHA_MAX * LOCAL_NN];
       double g_aux_left_der_array[LOCAL_NN*4*2];
       double g_aux_right_der_array[LOCAL_NN*4*2];
-      // double M_radial_monomial_one[7];
-      // double M_radial_monomial_two[7];
-      // double radial_terms_one[7];
-      // double radial_terms_two[7];
-      // double B_der_r[LOCAL_NN*7];
-      // double B_der_l[LOCAL_NN*7];
 
 
-      int i_t=tid;
+      /* int i_t=tid;
       for(int il=0;il<local_nn;il++){
         if(i_t<nn){
           // int idx=global_rjs_idx[i_t+max_nn*i];
@@ -3269,7 +3263,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
           }
         }
         i_t+=WARP_SIZE;
-      }
+      } */
       
       int l_rjs_size=local_nn;
       g_aux_der_array_many(lim_soft_array, local_rjs,atom_widths, atom_width_scaling, 
@@ -3337,18 +3331,19 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
                          double central_weight,  bool do_central,  bool c_do_derivatives,
                          double rcut_soft, double rcut_hard, double filter_width,
                          double *A,
-                         double *global_I_left_array, double *global_I_right_array, double *global_amplitudes, double *global_exp_buffer,
-                         int *global_rjs_idx, int max_nn, int *global_nn,
-                         double *global_I0_array, double *global_M_left_array, double *global_M_right_array,
-                         double *global_lim_buffer_array, double *global_B_right, double *global_B_left, double *global_M_rad_mono,
-                         double *global_rjs, double *global_atom_widths,
+                        //  double *global_I_left_array, double *global_I_right_array, double *global_amplitudes, double *global_exp_buffer,
+                        //  int *global_rjs_idx, int max_nn, int *global_nn,
+                        //  double *global_I0_array, double *global_M_left_array, double *global_M_right_array,
+                        //  double *global_lim_buffer_array, double *global_B_right, double *global_B_left, double *global_M_rad_mono,
+                        //  double *global_rjs, double *global_atom_widths,
                          int radial_enhancement) {
   int tid = threadIdx.x;  // Thread ID within block (same as lane in this case)
   int i=blockIdx.x;
   int k=k_i[i];
   int n_neighbors = n_neigh[i];  // Number of neighbors to process
   double pi=acos(-1.0);
-  int cpu_nn=global_nn[i];
+  // int cpu_nn=global_nn[i];
+  
   // Initialize local count for this thread
   
   int local_rjs_idx[LOCAL_NN];
@@ -3400,7 +3395,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
   }
 
   if(local_nn>0){
-    int i_t=tid;
+    /* int i_t=tid;
     for(int il=0;il<local_nn;il++){
       if(i_t<nn){
         //int idx=global_rjs_idx[i_t+max_nn*i];
@@ -3431,7 +3426,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
         }
       }
       i_t+=WARP_SIZE;
-    }
+    } */
 
     double I_left_array[LOCAL_NN*ALPHA_MAX];
     double I_right_array[LOCAL_NN*ALPHA_MAX];
@@ -3514,7 +3509,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
     get_constant_poly_filter_coeff_array(local_rjs,atom_widths,rcut_soft,filter_width, left, B_l,
                                        l_rjs_size);
 
-    // i_t=tid;
+/*     // i_t=tid;
     // for(int il=0;il<local_nn;il++){
     //   if(i_t<nn){
     //     for(int i_alph=0;i_alph<a_max;i_alph++){
@@ -3524,7 +3519,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
     //     }
     //   }
     //   i_t+=WARP_SIZE;
-    // }
+    // } */
 
     M_radial_poly(I0_array,lim_buffer_array,a_max,local_nn,rcut_hard);
   
@@ -3631,7 +3626,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
       double B_der_l[LOCAL_NN*7];
 
 
-      int i_t=tid;
+      /* int i_t=tid;
       for(int il=0;il<local_nn;il++){
         if(i_t<nn){
           // int idx=global_rjs_idx[i_t+max_nn*i];
@@ -3662,7 +3657,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
           }
         }
         i_t+=WARP_SIZE;
-      }
+      } */
       
       int l_rjs_size=local_nn;
       int left=-1; int right=1;
@@ -3775,12 +3770,12 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                      int radial_enhancement, bool do_central, 
                      double rcut_soft, double rcut_hard, double filter_width,
                      double *A_d,
-                     double *global_I_left_array_d, double *global_I_right_array_d, double *global_amplitudes_d, double *global_exp_buffer_d,  
-                     int *global_rjs_idx_d, int max_nn, int *global_nn_d,
-                     double *global_I0_array_d, double *global_M_left_array_d, double *global_M_right_array_d, 
-                     double *global_lim_buffer_array_d, double *global_B_right_d, double *global_B_left_d, double *global_M_rad_mono_d,
-                     double *global_rjs_d, double *global_atom_widths_d,
-                     double *global_g_aux_left_array_d, double *global_g_aux_right_array_d,
+                    //  double *global_I_left_array_d, double *global_I_right_array_d, double *global_amplitudes_d, double *global_exp_buffer_d,  
+                    //  int *global_rjs_idx_d, int max_nn, int *global_nn_d,
+                    //  double *global_I0_array_d, double *global_M_left_array_d, double *global_M_right_array_d, 
+                    //  double *global_lim_buffer_array_d, double *global_B_right_d, double *global_B_left_d, double *global_M_rad_mono_d,
+                    //  double *global_rjs_d, double *global_atom_widths_d,
+                    //  double *global_g_aux_left_array_d, double *global_g_aux_right_array_d,
                      hipStream_t *stream){
                     
   int warp_size;
@@ -3803,12 +3798,12 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                                             central_weight, do_central, c_do_derivatives,
                                             rcut_soft, rcut_hard, filter_width,
                                             A_d,
-                                            global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d,
-                                            global_rjs_idx_d, max_nn, global_nn_d,
-                                            global_I0_array_d, global_M_left_array_d, global_M_right_array_d,
-                                            global_lim_buffer_array_d, global_B_right_d, global_B_left_d, global_M_rad_mono_d,
-                                            global_rjs_d, global_atom_widths_d,
-                                            global_g_aux_left_array_d, global_g_aux_right_array_d,
+                                            // global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d,
+                                            // global_rjs_idx_d, max_nn, global_nn_d,
+                                            // global_I0_array_d, global_M_left_array_d, global_M_right_array_d,
+                                            // global_lim_buffer_array_d, global_B_right_d, global_B_left_d, global_M_rad_mono_d,
+                                            // global_rjs_d, global_atom_widths_d,
+                                            // global_g_aux_left_array_d, global_g_aux_right_array_d,
                                             radial_enhancement);
 
   cuda_buffer_newnew<<<n_sites, warp_size>>>(exp_coeff_d, exp_coeff_der_d,
@@ -3819,11 +3814,11 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                                             central_weight, do_central, c_do_derivatives,
                                             rcut_soft, rcut_hard, filter_width,
                                             A_d,
-                                            global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d,
-                                            global_rjs_idx_d, max_nn, global_nn_d,
-                                            global_I0_array_d, global_M_left_array_d, global_M_right_array_d,
-                                            global_lim_buffer_array_d, global_B_right_d, global_B_left_d, global_M_rad_mono_d,
-                                            global_rjs_d, global_atom_widths_d,
+                                            // global_I_left_array_d, global_I_right_array_d, global_amplitudes_d, global_exp_buffer_d,
+                                            // global_rjs_idx_d, max_nn, global_nn_d,
+                                            // global_I0_array_d, global_M_left_array_d, global_M_right_array_d,
+                                            // global_lim_buffer_array_d, global_B_right_d, global_B_left_d, global_M_rad_mono_d,
+                                            // global_rjs_d, global_atom_widths_d,
                                             radial_enhancement);
 
   dim3 nblocks=dim3((n_sites-1+tpb)/tpb,1,1);
