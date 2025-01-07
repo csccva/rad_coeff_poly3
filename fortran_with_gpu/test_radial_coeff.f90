@@ -44,7 +44,7 @@ program test_radial
 !  do_derivatives = .false.
 !**************************************
 
-  n_sites = 1000
+  n_sites = 10000
   allocate( n_neigh(1:n_sites) )
   n_neigh = 50
   allocate( rjs_in(1:n_sites*n_neigh(1)) )

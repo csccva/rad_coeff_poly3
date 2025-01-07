@@ -14,6 +14,7 @@
 #include <assert.h>
 #include <hip/hip_complex.h>
 
+
 #define tpb 64 // optimize for best performance & check the effect on each kernel which used tpb for the shared memory
 #define tpb_get_soap_der_one 128
 #define tpbcnk 64 // this is because k_max is 45???
@@ -2591,6 +2592,13 @@ extern "C" void gpu_device_synchronize(){
 }
 
 
+
+#define WARP_SIZE 64 // 32 for cuda!!!!!!
+#define LOCAL_NN 1
+#define ALPHA_MAX 7
+#define MAXT 64
+#define MAXB 16
+
 __global__
 void global_scaling_operator(double *exp_coeff_d, 
                      double rcut_hard_in, int n_exp_coeff, int divide){
@@ -2608,11 +2616,13 @@ void global_scaling_operator(double *exp_coeff_d,
   }
 }
 
+#define newtpb 64
+#define newminb 32
 __global__
+ __launch_bounds__ (newtpb, newminb)
 void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int *k_i, int *n_neigh_d, 
                   int alpha_max, int n_sites)
 {
-
   int i_site=threadIdx.x+blockIdx.x*blockDim.x; 
   if(i_site<n_sites)
   {
@@ -2621,20 +2631,17 @@ void exp_w_matmul(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int
     for(int i_m=0; i_m<alpha_max; i_m++){
       for(int i_j=0;i_j<my_nn;i_j++){
         double matmul_We=0.0;
-        for(int i_k=0;i_k<alpha_max;i_k++){
+        #pragma unroll
+        for(int i_k=0;i_k<ALPHA_MAX;i_k++){
           //matmul_We+=W_d[i_n+i_k*alpha_max]*exp_coeff_d[i_k+(i_d+my_k)*alpha_max];
           matmul_We+=W_d[i_m+i_k*alpha_max]*exp_coeff_d[i_k+(i_j+my_k)*alpha_max];
         }
         tmp_exp_coeff_d[i_m+(i_j+my_k)*alpha_max]=matmul_We;
       }
     }
-
   }
 }
-
-#define WARP_SIZE 64 // 32 for cuda!!!!!!
-#define LOCAL_NN 1
-#define ALPHA_MAX 7
+/* 
 __device__ int warp_red_int(int data) {
 
    int res = data;
@@ -2643,8 +2650,40 @@ __device__ int warp_red_int(int data) {
       res += __shfl_down(res, i,WARP_SIZE);      
    }
    return res;
+} */
+
+template <typename T>
+__device__ T warp_red(T data) {
+    T res = data;
+    for (int i = WARP_SIZE / 2; i != 0; i >>= 1) {
+      //res += __shfl_down_sync(0xffffffff, res, i, WARP_SIZE); // Updated for CUDA
+      res += __shfl_down(res, i, WARP_SIZE);
+    }
+    return res;
 }
 
+
+__global__
+ __launch_bounds__ (MAXT, MAXB)
+void exp_w_matmul_newnew(double *exp_coeff_d, double *tmp_exp_coeff_d, double *W_d, int *k_i, int *n_neigh_d, 
+                  int alpha_max, int n_sites)
+{
+  int tid = threadIdx.x;
+  int i_site=blockIdx.x; 
+  int my_k=k_i[i_site];
+  int my_nn=n_neigh_d[i_site];
+  for(int i_m=0; i_m<alpha_max; i_m++){
+    for(int i_j=tid;i_j<my_nn;i_j+=WARP_SIZE){
+      double matmul_We=0.0;
+      #pragma unroll
+      for(int i_k=0;i_k<ALPHA_MAX;i_k++){
+        //matmul_We+=W_d[i_n+i_k*alpha_max]*exp_coeff_d[i_k+(i_d+my_k)*alpha_max];
+        matmul_We+=W_d[i_m+i_k*alpha_max]*exp_coeff_d[i_k+(i_j+my_k)*alpha_max];
+      }
+      tmp_exp_coeff_d[i_m+(i_j+my_k)*alpha_max]=matmul_We;
+    }
+  }
+}
 
 __device__
 void M_radial_poly(double *I0_array, double *lim_buffer_array, int a_max, int local_nn, double rcut) {
@@ -2946,8 +2985,9 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
       poly_right[il+(3+1*4)*LOCAL_NN]= 2.0/(width[il]*width[il]*width[il]);
     }
 }
+
  __global__ 
- //__launch_bounds__ (64, 2)
+ __launch_bounds__ (MAXT, MAXB)
  void cuda_soft_newnew(double *exp_coeff, double *exp_coeff_der,
                          const double* rjs_in, const bool* mask, const double rcut_soft_in, 
                          const double rcut_hard_in, const double atom_sigma_in, 
@@ -3007,7 +3047,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
 
   }
 
-  int warp_nn= warp_red_int(local_nn);
+  int warp_nn= warp_red(local_nn); //int warp_nn= warp_red_int(local_nn);
     // Broadcast the computed warp_nn to all threads in the warp
     // HIP: Use __shfl
     // CUDA Equivalent:
@@ -3321,7 +3361,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
 }
 
  __global__ 
- //__launch_bounds__ (64, 2)
+ __launch_bounds__ (MAXT, MAXB)
  void cuda_buffer_newnew(double *exp_coeff, double *exp_coeff_der,
                          const double* rjs_in, const bool* mask, const double rcut_soft_in, 
                          const double rcut_hard_in, const double atom_sigma_in, 
@@ -3343,7 +3383,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
   int n_neighbors = n_neigh[i];  // Number of neighbors to process
   double pi=acos(-1.0);
   // int cpu_nn=global_nn[i];
-  
+
   // Initialize local count for this thread
   
   int local_rjs_idx[LOCAL_NN];
@@ -3383,7 +3423,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
 
   }
 
-  int warp_nn= warp_red_int(local_nn);
+  int warp_nn= warp_red(local_nn); //int warp_nn= warp_red_int(local_nn);
     // Broadcast the computed warp_nn to all threads in the warp
     // HIP: Use __shfl
     // CUDA Equivalent:
@@ -3427,16 +3467,18 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
       }
       i_t+=WARP_SIZE;
     } */
-
+    
     double I_left_array[LOCAL_NN*ALPHA_MAX];
     double I_right_array[LOCAL_NN*ALPHA_MAX];
-    double atom_sigma_scaleds[LOCAL_NN];
-    double s2s[LOCAL_NN];
     double M_left_array [2 * ALPHA_MAX * LOCAL_NN];
     double M_right_array[2 * ALPHA_MAX * LOCAL_NN];
+    {
+    double atom_sigma_scaleds[LOCAL_NN];
+    double s2s[LOCAL_NN];
     double M_rad_mono[LOCAL_NN*7*7*3];
-    double B_r[LOCAL_NN*7];
-    double B_l[LOCAL_NN*7];
+    double B[LOCAL_NN*7];
+    // double B_l[LOCAL_NN*7];
+    // double B_r[LOCAL_NN*7];
 
 
     for(int il=0;il<local_nn;il++){
@@ -3506,7 +3548,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
     }
     int l_rjs_size=local_nn;
     int left=-1; int right=1;
-    get_constant_poly_filter_coeff_array(local_rjs,atom_widths,rcut_soft,filter_width, left, B_l,
+    get_constant_poly_filter_coeff_array(local_rjs,atom_widths,rcut_soft,filter_width, left, B,
                                        l_rjs_size);
 
 /*     // i_t=tid;
@@ -3531,6 +3573,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
     for(int il=0;il<local_nn; il++){
       radial_terms_one[0]=1.0;
       radial_terms_two[0]=1.0;
+      #pragma unroll
       for(int i_p=1;i_p<7;i_p++){
         radial_terms_one[i_p]=lim_buffer_array[0*LOCAL_NN+il]*radial_terms_one[i_p-1];
         radial_terms_two[i_p]=lim_buffer_array[1*LOCAL_NN+il]*radial_terms_two[i_p-1];
@@ -3542,18 +3585,19 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
         get_M_radiam_monomial(6,M_radial_monomial_two,radial_terms_two,i_alph);
         #pragma unroll
         for (int i_s=0;i_s<ALPHA_MAX;i_s++){
-        temp1+=B_l[i_s+il*7]*M_radial_monomial_one[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*0))];
-        temp2+=B_l[i_s+il*7]*M_radial_monomial_two[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
+        temp1+=B[i_s+il*7]*M_radial_monomial_one[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*0))];
+        temp2+=B[i_s+il*7]*M_radial_monomial_two[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
         }
         M_left_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=-temp1*I0_array[il+LOCAL_NN*(0*a_max+i_alph)];
         M_left_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=-temp2*I0_array[il+LOCAL_NN*(1*a_max+i_alph)];
       }
     }
     
-    get_constant_poly_filter_coeff_array(local_rjs,atom_widths,rcut_soft,filter_width, right, B_r,l_rjs_size);
+    get_constant_poly_filter_coeff_array(local_rjs,atom_widths,rcut_soft,filter_width, right, B,l_rjs_size);
     for(int il=0;il<local_nn; il++){
       radial_terms_one[0]=1.0;
       radial_terms_two[0]=1.0;
+      #pragma unroll
       for(int i_p=1;i_p<7;i_p++){
         radial_terms_one[i_p]=lim_buffer_array[1*LOCAL_NN+il]*radial_terms_one[i_p-1];
         radial_terms_two[i_p]=lim_buffer_array[2*LOCAL_NN+il]*radial_terms_two[i_p-1];
@@ -3565,14 +3609,15 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
         get_M_radiam_monomial(6,M_radial_monomial_two,radial_terms_two,i_alph);
         #pragma unroll
         for (int i_s=0;i_s<ALPHA_MAX;i_s++){
-          temp1+=B_r[i_s+il*7]*M_radial_monomial_one[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
-          temp2+=B_r[i_s+il*7]*M_radial_monomial_two[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*2))];
+          temp1+=B[i_s+il*7]*M_radial_monomial_one[i_s]; 
+          temp2+=B[i_s+il*7]*M_radial_monomial_two[i_s]; 
         }
         M_right_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=-temp1*I0_array[il+LOCAL_NN*(1*a_max+i_alph)];
         M_right_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=-temp2*I0_array[il+LOCAL_NN*(2*a_max+i_alph)];
       }
     }
-
+    }
+  
     for(int il=0;il<local_nn; il++){
       for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
         double temp1 = 0.0;
@@ -3597,6 +3642,7 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
         I_right_array[il+i_alph*LOCAL_NN]=temp1*I0_array[il+LOCAL_NN*(2*a_max+i_alph+4)]-temp2*I0_array[il+LOCAL_NN*(1*a_max+i_alph+4)];
       }
     }
+    
 
     for(int il=0;il<local_nn;il++){
       for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
@@ -3618,12 +3664,14 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
       double I_right_der_array[LOCAL_NN*ALPHA_MAX];
       double M_left_der_array [2 * ALPHA_MAX * LOCAL_NN];
       double M_right_der_array[2 * ALPHA_MAX * LOCAL_NN];
+      {
       double M_radial_monomial_one[7];
       double M_radial_monomial_two[7];
       double radial_terms_one[7];
       double radial_terms_two[7];
-      double B_der_r[LOCAL_NN*7];
-      double B_der_l[LOCAL_NN*7];
+      double B_der[LOCAL_NN*7];
+      // double B_der_r[LOCAL_NN*7];
+      // double B_der_l[LOCAL_NN*7];
 
 
       /* int i_t=tid;
@@ -3663,11 +3711,12 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
       int left=-1; int right=1;
 
       get_constant_poly_filter_coeff_der_array(local_rjs,atom_widths,atom_width_scaling,rcut_soft,filter_width, 
-                                               left, B_der_l, l_rjs_size);
+                                               left, B_der, l_rjs_size);
 
       for(int il=0;il<local_nn; il++){
         radial_terms_one[0]=1.0;
         radial_terms_two[0]=1.0;
+        #pragma unroll
         for(int i_p=1;i_p<7;i_p++){
           radial_terms_one[i_p]=lim_buffer_array[0*LOCAL_NN+il]*radial_terms_one[i_p-1];
           radial_terms_two[i_p]=lim_buffer_array[1*LOCAL_NN+il]*radial_terms_two[i_p-1];
@@ -3679,8 +3728,8 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
           get_M_radiam_monomial(6,M_radial_monomial_two,radial_terms_two,i_alph);
           #pragma unroll
           for (int i_s=0;i_s<ALPHA_MAX;i_s++){
-            temp1+=B_der_l[i_s+il*7]*M_radial_monomial_one[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*0))];
-            temp2+=B_der_l[i_s+il*7]*M_radial_monomial_two[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
+            temp1+=B_der[i_s+il*7]*M_radial_monomial_one[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*0))];
+            temp2+=B_der[i_s+il*7]*M_radial_monomial_two[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
           }
           M_left_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=-temp1*I0_array[il+LOCAL_NN*(0*a_max+i_alph)];
           M_left_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=-temp2*I0_array[il+LOCAL_NN*(1*a_max+i_alph)];
@@ -3690,11 +3739,12 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
 
 
       get_constant_poly_filter_coeff_der_array(local_rjs,atom_widths,atom_width_scaling,rcut_soft,filter_width, 
-                                               right, B_der_r, l_rjs_size);
+                                               right, B_der, l_rjs_size);
 
       for(int il=0;il<local_nn; il++){
       radial_terms_one[0]=1.0;
       radial_terms_two[0]=1.0;
+      #pragma unroll
       for(int i_p=1;i_p<7;i_p++){
         radial_terms_one[i_p]=lim_buffer_array[1*LOCAL_NN+il]*radial_terms_one[i_p-1];
         radial_terms_two[i_p]=lim_buffer_array[2*LOCAL_NN+il]*radial_terms_two[i_p-1];
@@ -3706,14 +3756,14 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
         get_M_radiam_monomial(6,M_radial_monomial_two,radial_terms_two,i_alph);
         #pragma unroll
         for (int i_s=0;i_s<ALPHA_MAX;i_s++){
-          temp1+=B_der_r[i_s+il*7]*M_radial_monomial_one[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
-          temp2+=B_der_r[i_s+il*7]*M_radial_monomial_two[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*2))];
+          temp1+=B_der[i_s+il*7]*M_radial_monomial_one[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*1))];
+          temp2+=B_der[i_s+il*7]*M_radial_monomial_two[i_s]; //M_rad_mono[il+LOCAL_NN*(i_s+7*(i_alph+7*2))];
         }
         M_right_der_array[il+LOCAL_NN*(0*ALPHA_MAX+i_alph)]=-temp1*I0_array[il+LOCAL_NN*(1*a_max+i_alph)];
         M_right_der_array[il+LOCAL_NN*(1*ALPHA_MAX+i_alph)]=-temp2*I0_array[il+LOCAL_NN*(2*a_max+i_alph)];
       }
     }
-      
+      }  
       for(int il=0;il<local_nn; il++){
         for(int i_alph=0;i_alph<ALPHA_MAX;i_alph++){
           double temp1 = 0.0;
@@ -3821,15 +3871,17 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                                             // global_rjs_d, global_atom_widths_d,
                                             radial_enhancement);
 
-  dim3 nblocks=dim3((n_sites-1+tpb)/tpb,1,1);
-  dim3 nthreads=dim3(tpb,1,1); 
+  dim3 nblocks=dim3((n_sites-1+newtpb)/newtpb,1,1);
+  dim3 nthreads=dim3(newtpb,1,1); 
   double *tmp_exp_coeff_d;
   gpuErrchk(hipMallocAsync((void**)&tmp_exp_coeff_d,sizeof(double)*n_exp_coeff,stream[0]));
 
-  exp_w_matmul<<<nblocks,nthreads>>>(exp_coeff_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
+  //exp_w_matmul<<<nblocks,nthreads>>>(exp_coeff_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
+  exp_w_matmul_newnew<<<n_sites, warp_size>>>(exp_coeff_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
   gpuErrchk(hipMemcpyAsync(exp_coeff_d, tmp_exp_coeff_d, n_exp_coeff*sizeof(double), hipMemcpyDeviceToDevice,stream[0] ));
   if(c_do_derivatives){
-    exp_w_matmul<<<nblocks,nthreads>>>(exp_coeff_der_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
+    //exp_w_matmul<<<nblocks,nthreads>>>(exp_coeff_der_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
+    exp_w_matmul_newnew<<<n_sites, warp_size>>>(exp_coeff_der_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
     gpuErrchk(hipMemcpyAsync(exp_coeff_der_d, tmp_exp_coeff_d, n_exp_coeff_der*sizeof(double), hipMemcpyDeviceToDevice,stream[0] ));
   } 
 

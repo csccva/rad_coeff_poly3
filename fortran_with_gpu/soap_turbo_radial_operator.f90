@@ -776,8 +776,6 @@ num_scaling_mode=-100000
 call gpu_set_device(rank)
 call create_cublas_handle(cublas_handle, gpu_stream)
 
-call  gpu_device_synchronize()
-call cpu_time(f_time(1))
 
 c_do_derivatives=do_derivatives
 c_do_central=do_central
@@ -896,15 +894,6 @@ endif
 ! call cpy_htod(c_loc( global_nn), global_nn_d, st_g_nn, gpu_stream)
 
 
-n_rjs_in=size(rjs_in,1)
-st_rjs_in=n_rjs_in*c_double
-call gpu_malloc_all(rjs_in_d, st_rjs_in, gpu_stream)
-call cpy_htod(c_loc(rjs_in), rjs_in_d, st_rjs_in, gpu_stream)
-!stop
-
-st_mask= size(mask,1)*sizeof(new_mask(1))
-call gpu_malloc_all(mask_d, st_mask, gpu_stream)
-call cpy_htod(c_loc(new_mask), mask_d, st_mask, gpu_stream)
 
 allocate(k_i(1:n_sites))
 k_i=0
@@ -915,6 +904,19 @@ do i = 1, n_sites
   k = k + n_neigh(i)
 
 enddo 
+
+call  gpu_device_synchronize()
+call cpu_time(f_time(1))
+
+n_rjs_in=size(rjs_in,1)
+st_rjs_in=n_rjs_in*c_double
+call gpu_malloc_all(rjs_in_d, st_rjs_in, gpu_stream)
+call cpy_htod(c_loc(rjs_in), rjs_in_d, st_rjs_in, gpu_stream)
+!stop
+
+st_mask= size(mask,1)*sizeof(new_mask(1))
+call gpu_malloc_all(mask_d, st_mask, gpu_stream)
+call cpy_htod(c_loc(new_mask), mask_d, st_mask, gpu_stream)
 
 st_n_neigh=n_sites*c_int
 st_k_i=n_sites*c_int
