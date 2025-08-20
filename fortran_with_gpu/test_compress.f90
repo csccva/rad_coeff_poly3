@@ -51,8 +51,8 @@ program test_compress
 !     change with whatever gpu subroutine!!!
 !     1) Get the dimension of the compressed vector, needed for allocation later
       call cpu_time(t1)
-      call get_compress_indices( compress_options(i), alpha_max, l_max, dim, &
-                                 P_nonzero_1, P_i_1, P_j_1, P_el_1, "get_dim" )
+      call get_compress_indices_gpu( compress_options(i), alpha_max, l_max, dim, &
+                                     P_nonzero_1, P_i_1, P_j_1, P_el_1, "get_dim" )
       call cpu_time(t2)
       write(*,*) t2-t1, "seconds for GPU version (dim)"
       write(*,*) dim, P_nonzero_1
@@ -61,8 +61,8 @@ program test_compress
       allocate( P_j_1(1:P_nonzero_1) )
       allocate( P_el_1(1:P_nonzero_1) )
       call cpu_time(t1)
-      call get_compress_indices( compress_options(i), alpha_max, l_max, dim, &
-                                 P_nonzero_1, P_i_1, P_j_1, P_el_1, "set_indices" )
+      call get_compress_indices_gpu( compress_options(i), alpha_max, l_max, dim, &
+                                     P_nonzero_1, P_i_1, P_j_1, P_el_1, "set_indices" )
       call cpu_time(t2)
       write(*,*) t2-t1, "seconds for GPU version (indices)"
 
