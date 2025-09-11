@@ -1,17 +1,22 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ! Test of GPU implementation of the compression subroutine 
 ! compared to CPU implementation.
-! 
+! rm *.o *.mod; ftn  -fPIC -O3 -h flex_mp=intolerant  soap_turbo_functions.f90 soap_turbo_radial.f90  soap_turbo_compress.f90  test_compress.f90 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 program test_compress
 
   use soap_turbo_compress_module
+  ! use soap_turbo_desc
+  use soap_turbo_radial
+  use soap_turbo_angular
+
 
   implicit none
 
   integer :: l_max=5
-  integer :: alpha_max(2)=[5, 5]          ! one value per chemical species
+  !integer :: alpha_max(2)=[5, 5]          ! one value per chemical species
+  integer :: alpha_max(1)=[7], int_alpha_max=7       ! one value per chemical species
   character*16 :: compress_mode="trivial" ! see compress_options
   logical :: do_all_modes=.false.          ! .true. runs all compress_options,
                                           ! .false. only runs compress_mode
@@ -23,13 +28,87 @@ program test_compress
   real*8 :: t1, t2
   real*8, allocatable :: P_el(:), P_el_1(:)
   
+  integer :: n_sites, radial_enhancement
+  integer, allocatable :: n_neigh(:)
+  real*8 :: rcut_soft_in, rcut_hard_in, atom_sigma_in, atom_sigma_scaling, &
+            amplitude_scaling, central_weight, nf = 4.d0
+  real*8, allocatable :: rjs_in(:), W(:,:), S(:,:), exp_coeff(:,:), exp_coeff_der(:,:),  &
+                         exp_coeff_cp(:,:), exp_coeff_der_cp(:,:)
+  logical :: do_derivatives, do_central
+  logical, allocatable :: mask(:)
+  character*16 :: scaling_mode = "polynomial"
+
+!***************************************
+! SOAP parameters
+  central_weight = 1.d0
+  rcut_soft_in = 3.65d0
+  rcut_hard_in = 4.d0
+  atom_sigma_in = 0.3d0
+  atom_sigma_scaling = 0.2d0
+  atom_sigma_scaling = 0.d0
+  amplitude_scaling = 1.d0
+  radial_enhancement = 2
+
+  do_central = .true.
+  do_derivatives = .true.
+!  do_derivatives = .false.
+!**************************************
+  n_sites = 1000
+  allocate( n_neigh(1:n_sites) )
+  n_neigh = 50
+  allocate( rjs_in(1:n_sites*n_neigh(1)) )
+  allocate( mask(1:n_sites*n_neigh(1)) )
+  allocate( exp_coeff(1:int_alpha_max,1:n_sites*n_neigh(1)) )
+  allocate( exp_coeff_der(1:int_alpha_max,1:n_sites*n_neigh(1)) )
+
+  exp_coeff = 0.d0
+  exp_coeff_der = 0.d0
+
+  call RANDOM_NUMBER(rjs_in)
+  rjs_in = 1.d0 + rjs_in*3.d0
+  rjs_in(1) = 0.d0 
+!  write(*,*) rjs_in
+  mask = .true.
+
+  allocate( W(1:int_alpha_max, 1:int_alpha_max) )
+  allocate( S(1:int_alpha_max, 1:int_alpha_max) )
+
+  call get_orthonormalization_matrix_poly3_tabulated(int_alpha_max, S, W)
 
   call p_i_p_j()
+
+
+! Using poly3
+  call cpu_time(t1)
+  call get_radial_expansion_coefficients_poly3(n_sites, n_neigh, rjs_in, int_alpha_max, rcut_soft_in, &
+                                               rcut_hard_in, atom_sigma_in, atom_sigma_scaling, &
+                                               amplitude_scaling, nf, W, scaling_mode, mask, &
+                                               radial_enhancement, do_derivatives, do_central, &
+                                               central_weight, exp_coeff, exp_coeff_der)
+  ! write(*,*) exp_coeff, exp_coeff_der
+  
+
+! For the angular expansion the masking works differently, since we do not have a species-augmented basis as in the
+! radial expansion part.
+  call get_angular_expansion_coefficients(n_sites, n_neigh, thetas, phis, rjs, atom_sigma_t, atom_sigma_t_scaling, &
+                                          rcut_max, l_max, eimphi, preflm, plm_array, prefl, prefm, &
+                                          fact_array, mask, n_species, eimphi_rad_der, &
+                                          do_derivatives, prefl_rad_der, angular_exp_coeff, angular_exp_coeff_rad_der, &
+                                          angular_exp_coeff_azi_der, angular_exp_coeff_pol_der )
+                                          
+  call cpu_time(t2)
+! Just to make sure the calculation is done with -O3
+!  write(*,*) exp_coeff(1:alpha_max, 1)
+  write(*,*) t2-t1, "seconds for poly3"
+  
   contains
 
   subroutine p_i_p_j()
     !***************************************
 
+  ! write(*,*) size(compress_options)
+  ! stop
+  
   do i=1, size(compress_options)
     if( .not. do_all_modes .and. compress_options(i) /= compress_mode )then
       cycle
@@ -100,9 +179,9 @@ program test_compress
 !       end if
      end if
     write(*,*) "--------------------------------------------------------"
-    ! write(*,*) "P_i (CPU): ", P_i
+     write(*,*) "P_i (CPU): ", P_i
     ! write(*,*) "P_i (GPU): ", P_i_1
-    ! write(*,*) "P_el (CPU): ", P_el
+     write(*,*) "P_el (CPU): ", P_el
     ! write(*,*) "P_el (GPU): ", P_el_1
     deallocate( P_i, P_j, P_el)
     ! deallocate( P_i, P_i_1, P_j, P_j_1, P_el, P_el_1 )
