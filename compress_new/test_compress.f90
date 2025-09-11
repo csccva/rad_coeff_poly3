@@ -7,7 +7,6 @@
 program test_compress
 
   use soap_turbo_compress_module
-  ! use soap_turbo_desc
   use soap_turbo_radial
   use soap_turbo_angular
 
@@ -28,7 +27,7 @@ program test_compress
   real*8 :: t1, t2
   real*8, allocatable :: P_el(:), P_el_1(:)
   
-  integer :: n_sites, radial_enhancement
+  integer :: n_sites, radial_enhancement, n_max
   integer, allocatable :: n_neigh(:)
   real*8 :: rcut_soft_in, rcut_hard_in, atom_sigma_in, atom_sigma_scaling, &
             amplitude_scaling, central_weight, nf = 4.d0
@@ -69,9 +68,32 @@ program test_compress
   rjs_in(1) = 0.d0 
 !  write(*,*) rjs_in
   mask = .true.
+  
+  ! This is to build the radial basis
+  n_max = 0
+  n_species=size(alpha_max,1)
+  do i = 1, n_species
+    n_max = n_max + alpha_max(i)
+  end do
+  l_max= ????? 
+
+! Uncompressed SOAP dimensions
+  k_max = 1 + l_max*(l_max+1)/2 + l_max
+  n_soap_uncompressed = n_max*(n_max+1)/2 * (l_max+1)
+
+! This is for the expansion coefficients and the soap vectors
+  allocate( radial_exp_coeff(1:n_max, 1:n_atom_pairs) )
+  radial_exp_coeff = 0.d0
+  allocate( angular_exp_coeff(1:k_max, 1:n_atom_pairs) )
+  angular_exp_coeff = 0.d0
+  allocate( cnk( 1:k_max, 1:n_max, 1:n_sites) )
+  cnk = 0.d0
+
 
   allocate( W(1:int_alpha_max, 1:int_alpha_max) )
   allocate( S(1:int_alpha_max, 1:int_alpha_max) )
+  W = 0.d0
+  S = 0.d0
 
   call get_orthonormalization_matrix_poly3_tabulated(int_alpha_max, S, W)
 
@@ -86,7 +108,6 @@ program test_compress
                                                radial_enhancement, do_derivatives, do_central, &
                                                central_weight, exp_coeff, exp_coeff_der)
   ! write(*,*) exp_coeff, exp_coeff_der
-  
 
 ! For the angular expansion the masking works differently, since we do not have a species-augmented basis as in the
 ! radial expansion part.
@@ -96,7 +117,9 @@ program test_compress
                                           do_derivatives, prefl_rad_der, angular_exp_coeff, angular_exp_coeff_rad_der, &
                                           angular_exp_coeff_azi_der, angular_exp_coeff_pol_der )
                                           
-  call cpu_time(t2)
+  
+
+  call cpu_time(t2)  
 ! Just to make sure the calculation is done with -O3
 !  write(*,*) exp_coeff(1:alpha_max, 1)
   write(*,*) t2-t1, "seconds for poly3"
