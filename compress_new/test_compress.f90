@@ -36,6 +36,11 @@ program test_compress
   logical :: do_derivatives, do_central
   logical, allocatable :: mask(:)
   character*16 :: scaling_mode = "polynomial"
+  complex*16, allocatable :: angular_exp_coeff(:,:)
+  complex*16, allocatable :: angular_exp_coeff_rad_der(:,:), angular_exp_coeff_azi_der(:,:), angular_exp_coeff_pol_der(:,:)
+  real*8, allocatable :: preflm(:), plm_array(:), prefl(:), fact_array(:), prefl_rad_der(:)
+  complex*16, allocatable :: eimphi(:), prefm(:), eimphi_rad_der(:)
+  
 
 !***************************************
 ! SOAP parameters
@@ -51,6 +56,7 @@ program test_compress
   do_central = .true.
   do_derivatives = .true.
 !  do_derivatives = .false.
+  rcut_max = rcut_hard_in
 !**************************************
   n_sites = 1000
   allocate( n_neigh(1:n_sites) )

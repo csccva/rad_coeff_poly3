@@ -1,0 +1,83 @@
+! rm *.o *.mod; ftn  -fPIC -O3 -h flex_mp=intolerant  soap_turbo_functions.f90 soap_turbo_compress.f90 soap_turbo_angular.f90 soap_turbo_radial.f90 soap_turbo.f90  test.f90 
+!  srun --nodes=1 --account=project_462000007 --partition=standard-g --time=00:15:00 --gpus-per-node=8 --ntasks=1 ../turbogap_cpu/bin/turbogap predict 
+program test_compress
+
+use soap_turbo_desc
+implicit none
+integer :: n_sites, n_species,max_species_multiplicity, n_atom_pairs,n_soap
+integer :: n_neigh_len, alpha_max_len
+integer, allocatable :: n_neigh(:), compress_P_i(:), compress_P_j(:)
+integer, allocatable :: species(:, :), species_multiplicity(:), alpha_max(:)
+real*8, allocatable :: rcut_hard(:), rcut_soft(:),global_scaling(:),nf(:),compress_P_el(:)
+real*8, allocatable :: atom_sigma_r(:), atom_sigma_r_scaling(:), central_weight(:)
+real*8, allocatable :: atom_sigma_t(:), atom_sigma_t_scaling(:), amplitude_scaling(:)
+logical, allocatable :: mask(:, :)
+logical :: do_timing, do_derivatives, compress_soap
+real*8, allocatable :: rjs(:), thetas(:),phis(:)
+integer :: l_max, radial_enhancement, compress_P_nonzero
+character*64 :: basis
+character*32 :: scaling_mode
+real*8, allocatable :: soap(:,:), soap_cart_der(:,:,:)
+
+basis="poly3gauss"
+scaling_mode= "polynomial"
+do_timing=  .False.
+do_derivatives = .True.  
+compress_soap= .True.
+n_sites=27000
+n_species=1
+n_neigh_len=n_sites
+alpha_max_len=1
+l_max=8
+compress_P_nonzero= 72
+max_species_multiplicity=1
+n_atom_pairs=1926616
+radial_enhancement=1
+n_soap=72
+allocate(n_neigh(n_neigh_len))
+allocate (species(1:max_species_multiplicity, 1:n_sites))
+allocate (species_multiplicity(1:n_sites))
+allocate (mask(1:n_atom_pairs, 1:n_species))
+allocate (rjs(1:n_atom_pairs))
+allocate (thetas(1:n_atom_pairs))
+allocate (phis(1:n_atom_pairs))
+allocate (alpha_max(1:alpha_max_len))
+allocate (rcut_hard(1:alpha_max_len), rcut_soft(1:alpha_max_len))
+allocate (global_scaling(1:alpha_max_len))
+allocate (nf(1:alpha_max_len))
+allocate (atom_sigma_r(1:alpha_max_len))
+allocate (atom_sigma_r_scaling(1:alpha_max_len))
+allocate (atom_sigma_t(1:alpha_max_len))
+allocate (atom_sigma_t_scaling(1:alpha_max_len))
+allocate (amplitude_scaling(1:alpha_max_len))
+allocate (central_weight(1:alpha_max_len))
+allocate (compress_P_i(1:compress_P_nonzero))
+allocate (compress_P_j(1:compress_P_nonzero))
+allocate (compress_P_el(1:compress_P_nonzero))
+
+allocate (soap_cart_der(1:3, 1:n_soap, 1:n_atom_pairs))
+allocate (soap(1:n_soap, 1:n_sites))
+
+alpha_max=8
+rcut_hard=4.5
+rcut_soft=4.0
+nf=4.0
+global_scaling=1.0
+atom_sigma_r=0.5
+atom_sigma_r_scaling=0.0
+atom_sigma_t=0.5
+atom_sigma_t_scaling=0.0
+amplitude_scaling=1.0
+central_weight=1.0
+
+
+
+
+call get_soap(n_sites, n_neigh, n_species, species, species_multiplicity, n_atom_pairs, mask, rjs, &
+                       thetas, phis, alpha_max, l_max, rcut_hard, rcut_soft, nf, global_scaling, &
+                       atom_sigma_r, atom_sigma_r_scaling, atom_sigma_t, atom_sigma_t_scaling, &
+                       amplitude_scaling, radial_enhancement, central_weight, basis, scaling_mode, do_timing, &
+                       do_derivatives, compress_soap, compress_P_nonzero, compress_P_i, compress_P_j, &
+                       compress_P_el, soap, soap_cart_der)
+
+end program
