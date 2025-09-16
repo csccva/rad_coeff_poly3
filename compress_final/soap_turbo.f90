@@ -626,9 +626,9 @@ module soap_turbo_desc
 ! write(*,*) time2-time1
 !****************************
   end if
-  write(*,*)
-  write(*,*)  compress_soap
-  write(*,*) "Size off c_P_i  ", size(compress_P_i,1), "Size off c_P_el  ", size(compress_P_el,1)
+  ! write(*,*)
+  ! write(*,*)  compress_soap
+  ! write(*,*) "Size off c_P_i  ", size(compress_P_i,1), "Size off c_P_el  ", size(compress_P_el,1)
   ! open(unit=5, file="compress_P_i.dat", status="unknown")
   ! do i=1,size(compress_P_i,1)
   !   write(5,'(2(I0,1X))') i, compress_P_i(i)
