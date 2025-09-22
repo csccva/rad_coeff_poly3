@@ -282,9 +282,9 @@ contains
       open(unit=11,file="thetas.input", status="unknown")
       open(unit=12,file="phis.input", status="unknown")
       do i=1,size(rjs,1)
-         write(10, '(EN20.12)') rjs(i)
-         write(11, '(EN20.12)') thetas(i)
-         write(12, '(EN20.12)') phis(i)
+         write(10, *) rjs(i)
+         write(11, *) thetas(i)
+         write(12, *) phis(i)
       enddo
       close(12)
       close(10)
@@ -333,7 +333,7 @@ contains
 
       open(unit=19,file="compress_P_el.input", status="unknown")
       do i=1,size(compress_P_el,1)
-         write(19,'(EN20.12)') compress_P_el(i)
+         write(19,*) compress_P_el(i)
       enddo
       close(19)
 
@@ -342,9 +342,8 @@ contains
       ! stop
 
       open(unit=5,file="soap.output",status="unknown")
-      write(5, '(EN20.12)') soap(1:n_soap, 67)
       do i=1,n_soap
-         write(5, '(4(EN20.12))') soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
+         write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
       enddo
 
       if (n_sites > 0) then
@@ -364,9 +363,8 @@ contains
       !    enddo
       ! enddo
       
-      write(5, '(EN20.12)') soap(1:n_soap, 67)
       do i=1,n_soap
-         write(5, '(4(EN20.12))') soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
+         write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
       enddo
          
       close(5)
