@@ -131,7 +131,7 @@ close(19)
 
 open(unit=5,file="soap.output",status="unknown")
 do i=1,n_soap
-   write(5, '(4(EN20.12))') soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
+   write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
 enddo
 call get_soap(n_sites, n_neigh, n_species, species, species_multiplicity, n_atom_pairs, mask, rjs, &
                        thetas, phis, alpha_max, l_max, rcut_hard, rcut_soft, nf, global_scaling, &
@@ -142,7 +142,7 @@ call get_soap(n_sites, n_neigh, n_species, species, species_multiplicity, n_atom
 
 
 do i=1,n_soap
-   write(5, '(4(EN20.12))') soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
+   write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
 enddo
 close(5)
 
