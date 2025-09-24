@@ -25,14 +25,14 @@ scaling_mode= "polynomial"
 do_timing=  .False.
 do_derivatives = .True.  
 compress_soap= .True.
-n_sites=27000
+n_sites=2698 !2707 !27000
 n_species=1
 n_neigh_len=n_sites
 alpha_max_len=1
 l_max=8
 compress_P_nonzero= 72
 max_species_multiplicity=1
-n_atom_pairs=1926616
+n_atom_pairs=192723 ! 192654 !1926616
 radial_enhancement=1
 n_soap=72
 allocate(n_neigh(n_neigh_len))
@@ -130,9 +130,9 @@ enddo
 close(19)
 
 open(unit=5,file="soap.output",status="unknown")
-do i=1,n_soap
-   write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
-enddo
+! do i=1,n_soap
+!    write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
+! enddo
 call get_soap(n_sites, n_neigh, n_species, species, species_multiplicity, n_atom_pairs, mask, rjs, &
                        thetas, phis, alpha_max, l_max, rcut_hard, rcut_soft, nf, global_scaling, &
                        atom_sigma_r, atom_sigma_r_scaling, atom_sigma_t, atom_sigma_t_scaling, &

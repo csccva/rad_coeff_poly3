@@ -303,7 +303,7 @@ contains
       write(*,*) "radial_enhancement", radial_enhancement
       write(*,*) "central_weight", central_weight, size(central_weight,1)
       write(*,*) "basis ", basis
-      write(*,*) "scaling_mode", scaling_mode
+      write(*,*) "scaling_mode ", scaling_mode
       write(*,*) "do_timing ", do_timing
       write(*,*) "do_derivatives ", do_derivatives
       write(*,*) "compress_soap ", compress_soap
@@ -342,9 +342,9 @@ contains
       ! stop
 
       open(unit=5,file="soap.output",status="unknown")
-      do i=1,n_soap
-         write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
-      enddo
+      ! do i=1,n_soap
+      !    write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
+      ! enddo
 
       if (n_sites > 0) then
          call get_soap(n_sites, n_neigh, n_species, species, species_multiplicity, n_atom_pairs, mask, rjs, &
@@ -369,7 +369,7 @@ contains
          
       close(5)
 
-      !stop
+      stop
 
      
       !###########################################!
