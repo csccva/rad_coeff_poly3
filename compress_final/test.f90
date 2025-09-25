@@ -25,14 +25,14 @@ scaling_mode= "polynomial"
 do_timing=  .False.
 do_derivatives = .True.  
 compress_soap= .True.
-n_sites=2698 !2707 !27000
+n_sites=2451 ! 2698 !2707 !27000
 n_species=1
 n_neigh_len=n_sites
 alpha_max_len=1
 l_max=8
 compress_P_nonzero= 72
 max_species_multiplicity=1
-n_atom_pairs=192723 ! 192654 !1926616
+n_atom_pairs=175176 ! 192654 !1926616
 radial_enhancement=1
 n_soap=72
 allocate(n_neigh(n_neigh_len))
