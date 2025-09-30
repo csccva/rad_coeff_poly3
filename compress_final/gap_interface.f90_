@@ -253,6 +253,8 @@ contains
 
       write(*,*) "n_species ", n_species
       write(*,*) "max_species_multiplicity", max_species_multiplicity
+      write(*,*)
+      write(*,*) "species", size(species,1), size(species,2)
       open(unit=8,file="species.input", status="unknown")
       do j=1,size(species,2)
          do i=1,size(species,1)

@@ -365,6 +365,10 @@ module soap_turbo_desc
     end do
     do k = 1, species_multiplicity(i)
       j = species(k, i)
+      if(j>1.or. j<=0) then  
+        write(*,*) "WTF? ",i,j,k 
+      endif 
+      
       if( basis == "poly3gauss" .and. central_weight(j) /= 0.d0 )then
         if( radial_enhancement == 1 )then
           amplitude = dsqrt(2.d0/pi) * atom_sigma_r(j) / rcut_hard(j)

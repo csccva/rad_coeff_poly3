@@ -88,6 +88,14 @@ do i=1,size(species_multiplicity,1)
 end do
 close(9)
 
+open(unit=8,file="species.input", status="old")
+do j=1,size(species,2)
+    do i=1,size(species,1)
+       read(8,*) species(i,j)
+    end do
+end do
+close(8)
+
 open(unit=11,file="mask.input", status="old")
 do j=1,size(mask,2)
     do i=1,size(mask,1)
