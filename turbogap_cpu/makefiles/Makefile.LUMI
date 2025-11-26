@@ -1,0 +1,16 @@
+# TurboGAP makefile for LUMI
+
+# Compiler, preprocessor directives, etc.
+F90=ftn #-hlist=m
+PP=-e Z -D _MPIF90
+F90_MOD_DIR_OPT=-J
+
+# Optimization flags (uncomment second option to enable debugging tools)
+F90_OPTS=-fPIC -O3  -h flex_mp=intolerant #  -Rb
+#F90_OPTS+= -pg -fcheck=bounds -g -fcheck=all -fbacktrace
+
+# BLAS and LAPACK libraries
+
+#LIBS= -L/scratch/project_462000007/cristian/BLASSPACK/23.03/0.20.0/openblas-0.3.18-mde53ew/lib -lopenblas #-lsci_gnu
+#LIBS= -L/opt/cray/pe/libsci/22.12.1.1/GNU/9.1/x86_64/lib -lsci_gnu 
+LIBS=-lsci_cray
