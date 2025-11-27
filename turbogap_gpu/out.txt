@@ -1,0 +1,31 @@
+mkdir -p include
+mkdir -p build
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/third_party/bussi_thermostat/resamplekin.f90 -o build/resamplekin.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/fortran_cuda_interfaces.f90 -o build/fortran_cuda_interfaces.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/soap_turbo/src/soap_turbo_functions.f90 -o build/soap_turbo_functions.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/soap_turbo/src/soap_turbo_radial.f90 -o build/soap_turbo_radial.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/soap_turbo/src/soap_turbo_angular.f90 -o build/soap_turbo_angular.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/soap_turbo/src/soap_turbo.f90 -o build/soap_turbo.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/soap_turbo/src/soap_turbo_compress.f90 -o build/soap_turbo_compress.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/splines.f90 -o build/splines.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/types.f90 -o build/types.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/neighbors.f90 -o build/neighbors.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/gap.f90 -o build/gap.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/vdw.f90 -o build/vdw.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/local_properties.f90 -o build/local_properties.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/exp_utils.f90 -o build/exp_utils.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/xyz.f90 -o build/xyz.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/md.f90 -o build/md.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/mc.f90 -o build/mc.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/read_files.f90 -o build/read_files.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/gap_interface.f90 -o build/gap_interface.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/mpi.f90 -o build/mpi.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/exp_interface.f90 -o build/exp_interface.o
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include -c src/electrostatics.f90 -o build/electrostatics.o
+nvcc --resource-usage -lineinfo -O0 -x cu -I/users/cristian/TurboGAP/hop -I/users/cristian/TurboGAP/hop/source/hip  -DHOP_TARGET_CUDA -O3 -g -G -lcublas  -arch=sm_80 --ptxas-options=-v -c src/cuda_wrappers.cu -o build/cuda_wrappers.o
+nvcc --resource-usage -lineinfo -O0 -x cu -I/users/cristian/TurboGAP/hop -I/users/cristian/TurboGAP/hop/source/hip  -DHOP_TARGET_CUDA -O3 -g -G -lcublas  -arch=sm_80 --ptxas-options=-v -c src/gpu_exp.cu -o build/gpu_exp.o
+mkdir -p lib
+ar scr lib/libturbogap.a build/resamplekin.o build/fortran_cuda_interfaces.o build/soap_turbo_functions.o build/soap_turbo_radial.o build/soap_turbo_angular.o build/soap_turbo.o build/soap_turbo_compress.o build/splines.o build/types.o build/neighbors.o build/gap.o build/vdw.o build/local_properties.o build/exp_utils.o build/xyz.o build/md.o build/mc.o build/read_files.o build/gap_interface.o build/mpi.o build/exp_interface.o build/electrostatics.o  build/cuda_wrappers.o build/gpu_exp.o
+nvcc --resource-usage -lineinfo -O0 -x cu -std=c++17 -g -G -arch=sm_80 --ptxas-options=-v -I/users/cristian/TurboGAP/hop -I/users/cristian/TurboGAP/hop/source/hip  -DHOP_TARGET_CUDA  -c src/3b_final.cc -o build/3b_final.o
+mkdir -p bin
+mpif90 -lstdc++ -cpp -D _MPIF90  -g  -fPIC -O0  -ffree-line-length-none -fallow-argument-mismatch   -J include src/turbogap.f90 -o bin/turbogap build/resamplekin.o build/fortran_cuda_interfaces.o build/soap_turbo_functions.o build/soap_turbo_radial.o build/soap_turbo_angular.o build/soap_turbo.o build/soap_turbo_compress.o build/splines.o build/types.o build/neighbors.o build/gap.o build/vdw.o build/local_properties.o build/exp_utils.o build/xyz.o build/md.o build/mc.o build/read_files.o build/gap_interface.o build/mpi.o build/exp_interface.o build/electrostatics.o build/cuda_wrappers.o build/gpu_exp.o build/3b_final.o -lopenblas  -lcudart   -lcublas 
