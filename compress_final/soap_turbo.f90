@@ -59,7 +59,7 @@ module soap_turbo_desc
   character(*), intent(in) :: basis, scaling_mode
 
 ! Output variables
-  real*8, intent(inout) :: soap(:,:), soap_cart_der(:,:,:)
+  real*8, intent(inout),target :: soap(:,:), soap_cart_der(:,:,:)
 !-------------------
 
 
@@ -71,7 +71,7 @@ module soap_turbo_desc
   complex*16, allocatable :: eimphi(:), prefm(:), eimphi_rad_der(:)
 
   real*8, allocatable, save :: W(:,:), S(:,:), multiplicity_array(:)
-  real*8, allocatable :: soap_rad_der(:,:), sqrt_dot_p(:), soap_azi_der(:,:)
+  real*8, allocatable,target :: soap_rad_der(:,:), sqrt_dot_p(:), soap_azi_der(:,:)
   real*8, allocatable :: W_temp(:,:), S_temp(:,:)
   real*8, allocatable :: radial_exp_coeff(:,:), soap_pol_der(:,:)
   real*8, allocatable :: preflm(:), plm_array(:), prefl(:), fact_array(:), prefl_rad_der(:)
@@ -88,12 +88,18 @@ module soap_turbo_desc
   logical, allocatable :: do_central(:), skip_soap_component(:,:,:), skip_soap_component_flattened(:)
   logical, allocatable, save :: skip_soap_component_flattened_prev(:)
   logical, save :: recompute_basis = .true., recompute_multiplicity_array = .true.
+  type(c_ptr) :: cublas_handle, gpu_stream
+  integer(c_size_t) :: st_soap_d, st_sqrt_dot_p_d
+  type(c_ptr) :: soap_d, sqrt_dot_p_d
+
 !-------------------
 
   if( do_timing )then
     call cpu_time(time3)
   end if
 
+  call gpu_set_device(0) 
+  call create_cublas_handle(cublas_handle, gpu_stream)
 !-------------------
 ! Constants
   pi = dacos(-1.d0)
@@ -664,11 +670,27 @@ module soap_turbo_desc
   ! close(5)
   !stop
 
-! Now we normalize the soap vectors:
-  do i = 1, n_sites
-    soap(1:n_soap, i) = soap(1:n_soap, i) / sqrt_dot_p(i)
-  end do
+! ! Now we normalize the soap vectors:
+!   do i = 1, n_sites
+!     soap(1:n_soap, i) = soap(1:n_soap, i) / sqrt_dot_p(i)
+!   end do
+  st_soap_d=sizeof(soap)
+  st_sqrt_dot_p_d=size(sqrt_dot_p)
+  write(*,*) 
+  write(*,*) st_soap_d, st_sqrt_dot_p_d
+  write(*,*) 
+  call gpu_malloc_all(soap_d,st_soap_d,gpu_stream)
+  call cpy_htod(c_loc(soap),soap_d,st_soap_d,gpu_stream)
+  call gpu_malloc_all(sqrt_dot_p_d, st_sqrt_dot_p_d,gpu_stream)
 
+  call cpy_htod(c_loc(sqrt_dot_p),sqrt_dot_p_d,st_sqrt_dot_p_d,gpu_stream)
+
+  call gpu_soap_normalize(soap_d, sqrt_dot_p_d, n_soap, n_sites, gpu_stream)
+  call cpy_dtoh(soap_d,c_loc(soap),st_soap_d,gpu_stream)
+
+  call gpu_free_async(soap_d,gpu_stream)
+  call gpu_free_async(sqrt_dot_p_d,gpu_stream)
+  call gpu_device_sync()
 
 ! This is for debugging
  if( .false. )then

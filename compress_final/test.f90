@@ -25,11 +25,7 @@ program test_compress
    call allocate_all()
 
    call initialize()
-   
-   open(unit=5,file="soap_cpu.output",status="unknown")
-!  do i=1,n_soap
-!       write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
-!  enddo
+
    call get_soap(n_sites, n_neigh, n_species, species, species_multiplicity, n_atom_pairs, mask, rjs, &
                           thetas, phis, alpha_max, l_max, rcut_hard, rcut_soft, nf, global_scaling, &
                           atom_sigma_r, atom_sigma_r_scaling, atom_sigma_t, atom_sigma_t_scaling, &
@@ -37,7 +33,8 @@ program test_compress
                           do_derivatives, compress_soap, compress_P_nonzero, compress_P_i, compress_P_j, &
                           compress_P_el, soap, soap_cart_der)
 
-
+   
+   open(unit=5,file="soap_cpu.output",status="unknown")
    do i=1,n_soap
       write(5, *) soap(i, i_site_one), &
                   soap_cart_der(1, i, i_site_der),soap_cart_der(2, i, i_site_der),soap_cart_der(3, i, i_site_der)
@@ -45,10 +42,7 @@ program test_compress
    close(5)
    
    call initialize()
-   open(unit=5,file="soap_gpu.output",status="unknown")
-!  do i=1,n_soap
-!       write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
-!  enddo
+
    call get_soap_gpu(n_sites, n_neigh, n_species, species, species_multiplicity, n_atom_pairs, mask, rjs, &
                           thetas, phis, alpha_max, l_max, rcut_hard, rcut_soft, nf, global_scaling, &
                           atom_sigma_r, atom_sigma_r_scaling, atom_sigma_t, atom_sigma_t_scaling, &
@@ -56,12 +50,14 @@ program test_compress
                           do_derivatives, compress_soap, compress_P_nonzero, compress_P_i, compress_P_j, &
                           compress_P_el, soap, soap_cart_der)
 
+   open(unit=5,file="soap_gpu.output",status="unknown")
 
    do i=1,n_soap
       write(5, *) soap(i, i_site_one), &
                   soap_cart_der(1, i, i_site_der),soap_cart_der(2, i, i_site_der),soap_cart_der(3, i, i_site_der)
    enddo
    close(5)
+
    contains
 
    subroutine initialize()
