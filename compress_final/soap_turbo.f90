@@ -91,6 +91,13 @@ module soap_turbo_desc
   type(c_ptr) :: cublas_handle, gpu_stream
   integer(c_size_t) :: st_soap_d, st_sqrt_dot_p_d
   type(c_ptr) :: soap_d, sqrt_dot_p_d
+  integer(c_int), allocatable, target :: k3_index(:),i_k2_start(:), k2_start(:), k2_i_site(:)
+  type(c_ptr) ::  k2_i_site_d
+  type(c_ptr) :: k3_index_d, i_k2_start_d, n_neigh_d
+  integer(c_size_t) ::  st_n_sites_int , st_n_atom_pairs_int, st_skip_component
+  integer :: maxneigh
+  integer(c_size_t) :: st_n_atom_pairs_double, st_n_sites_double
+  integer(c_size_t) :: st_soap_rap_der
 
 !-------------------
 
@@ -525,6 +532,13 @@ module soap_turbo_desc
   end do
   deallocate( this_soap )
 
+  st_soap_d=sizeof(soap)
+  st_sqrt_dot_p_d=size(sqrt_dot_p)
+  call gpu_malloc_all(soap_d,st_soap_d,gpu_stream)
+  call cpy_htod(c_loc(soap),soap_d,st_soap_d,gpu_stream)
+  call gpu_malloc_all(sqrt_dot_p_d, st_sqrt_dot_p_d,gpu_stream)
+
+  call cpy_htod(c_loc(sqrt_dot_p),sqrt_dot_p_d,st_sqrt_dot_p_d,gpu_stream)
 
   if( do_derivatives )then
 !   Derivatives of the SOAP descriptor in spherical coordinates
@@ -611,6 +625,52 @@ module soap_turbo_desc
                                      soap(1:n_soap, i) / sqrt_dot_p(i)**3 * &
                                      dot_product( soap(1:n_soap, i), soap_pol_der(1:n_soap, k2) )
 !       Transform to Cartesian
+      end do
+    end do
+
+
+
+    allocate(k3_index(1:n_atom_pairs))
+    allocate(i_k2_start(1:n_sites))
+
+    
+
+    st_soap_rap_der=n_soap*n_atom_pairs*sizeof(soap_rad_der(1,1))
+    st_n_atom_pairs_int=n_atom_pairs*sizeof(k3_index(1))
+    st_n_sites_int=n_sites*sizeof(n_neigh(1))
+    st_n_sites_double=n_sites*sizeof(sqrt_dot_p(1))
+    st_n_atom_pairs_double=n_atom_pairs*sizeof(thetas(1))
+    st_skip_component=sizeof(skip_soap_component)
+     
+     k2 = 0
+     maxneigh=0
+     do i = 1, n_sites
+        if(n_neigh(i)>maxneigh) maxneigh=n_neigh(i)
+        do j = 1, n_neigh(i)
+           k2 = k2 + 1
+           !       Transform to Cartesian
+           if( j == 1 )then
+              k3_index(k2) = k2
+              i_k2_start(i)=k2
+           else
+              k3_index(k2)=k3_index(k2-1)
+           end if
+        end do
+     end do 
+
+     call gpu_malloc_all(i_k2_start_d,st_n_sites_int,gpu_stream)
+     call cpy_htod(c_loc(i_k2_start),i_k2_start_d,st_n_sites_int, gpu_stream)
+
+     call gpu_malloc_all(k3_index_d,st_n_atom_pairs_int,gpu_stream)
+     call cpy_htod(c_loc(k3_index),k3_index_d, st_n_atom_pairs_int, gpu_stream)
+
+    k2 = 0
+    do i = 1, n_sites
+      do j = 1, n_neigh(i)
+        this_soap_rad_der = 0.d0
+        this_soap_azi_der = 0.d0
+        this_soap_pol_der = 0.d0
+        k2 = k2 + 1
         if( j == 1 )then
           k3 = k2
         else
@@ -631,6 +691,14 @@ module soap_turbo_desc
     end do
     deallocate( this_soap_rad_der, this_soap_azi_der, this_soap_pol_der )
 
+    !  call gpu_get_soap_der(soap_d, sqrt_dot_p_d, soap_cart_der_d, &
+    !       soap_rad_der_d, soap_azi_der_d, soap_pol_der_d, &
+    !       thetas_d,phis_d,rjs_d, & 
+    !       multiplicity_array_d, &
+    !       cnk_d, cnk_rad_der_d, cnk_azi_der_d, cnk_pol_der_d, &
+    !       n_neigh_d, i_k2_start_d, k2_i_site_d, k3_index_d, skip_soap_component_d, &
+    !       n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh, gpu_stream) 
+
 !****************************
 ! Uncomment for detailed timing check
 !
@@ -638,59 +706,21 @@ module soap_turbo_desc
 ! write(*,*) time2-time1
 !****************************
   end if
-  ! write(*,*)
-  ! write(*,*)  compress_soap
-  ! write(*,*) "Size off c_P_i  ", size(compress_P_i,1), "Size off c_P_el  ", size(compress_P_el,1)
-  ! open(unit=5, file="compress_P_i.dat", status="unknown")
-  ! do i=1,size(compress_P_i,1)
-  !   write(5,'(2(I0,1X))') i, compress_P_i(i)
-  ! enddo
-  ! close(5)
 
-  ! open(unit=5, file="compress_P_el.dat", status="unknown")
-  ! do i=1,size(compress_P_el,1)
-  !   write(5,'(I0, 1X, EN20.12)') i, compress_P_el(i)
-  ! enddo
-  ! close(5)
-
-  ! open(unit=5, file="soap.dat", status="unknown")
-  ! do i=1,size(soap,2)
-  !   do k=1,size(soap,1)
-  !     write(5,'(I0, 1X, I0, 1X, EN20.12)') k,i, soap(k,i)
-  !   end do
-  ! end do
-  ! close(5)
-
-  ! open(unit=5, file="soap_rad_azi_pol_der.dat")
-  ! do i=1,size(soap_rad_der,2)
-  !   do k=1,size(soap_rad_der,1)
-  !     write(5,'(I0, 1X, I0, 1X, EN20.12, 1X, EN20.12, 1X, EN20.12)') k,i, soap_rad_der(k,i), soap_azi_der(k,i), soap_pol_der(k,i)
-  !   end do
-  ! end do
-  ! close(5)
-  !stop
-
-! ! Now we normalize the soap vectors:
-!   do i = 1, n_sites
-!     soap(1:n_soap, i) = soap(1:n_soap, i) / sqrt_dot_p(i)
-!   end do
-  st_soap_d=sizeof(soap)
-  st_sqrt_dot_p_d=size(sqrt_dot_p)
   write(*,*) 
+  write(*,*) "Before normalize soap_d."
   write(*,*) st_soap_d, st_sqrt_dot_p_d
   write(*,*) 
-  call gpu_malloc_all(soap_d,st_soap_d,gpu_stream)
-  call cpy_htod(c_loc(soap),soap_d,st_soap_d,gpu_stream)
-  call gpu_malloc_all(sqrt_dot_p_d, st_sqrt_dot_p_d,gpu_stream)
-
-  call cpy_htod(c_loc(sqrt_dot_p),sqrt_dot_p_d,st_sqrt_dot_p_d,gpu_stream)
-
   call gpu_soap_normalize(soap_d, sqrt_dot_p_d, n_soap, n_sites, gpu_stream)
   call cpy_dtoh(soap_d,c_loc(soap),st_soap_d,gpu_stream)
 
   call gpu_free_async(soap_d,gpu_stream)
   call gpu_free_async(sqrt_dot_p_d,gpu_stream)
   call gpu_device_sync()
+
+  write(*,*) 
+  write(*,*) "After normalize soap_d."
+  write(*,*) 
 
 ! This is for debugging
  if( .false. )then
