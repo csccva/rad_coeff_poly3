@@ -89,7 +89,7 @@ module soap_turbo_desc
   logical, allocatable, save :: skip_soap_component_flattened_prev(:)
   logical, save :: recompute_basis = .true., recompute_multiplicity_array = .true.
   type(c_ptr) :: cublas_handle, gpu_stream
-  integer(c_size_t) :: st_soap_d, st_sqrt_dot_p_d
+  integer(c_size_t) :: st_soap_d, st_sqrt_dot_p
   type(c_ptr) :: soap_d, sqrt_dot_p_d
   integer(c_int), allocatable, target :: k3_index(:),i_k2_start(:), k2_start(:), k2_i_site(:)
   type(c_ptr) ::  k2_i_site_d
@@ -540,13 +540,15 @@ module soap_turbo_desc
   end do
   deallocate( this_soap )
 
+
   st_soap_d=sizeof(soap)
-  st_sqrt_dot_p_d=size(sqrt_dot_p)
+  st_sqrt_dot_p=sizeof(sqrt_dot_p)
+
   call gpu_malloc_all(soap_d,st_soap_d,gpu_stream)
   call cpy_htod(c_loc(soap),soap_d,st_soap_d,gpu_stream)
-  call gpu_malloc_all(sqrt_dot_p_d, st_sqrt_dot_p_d,gpu_stream)
 
-  call cpy_htod(c_loc(sqrt_dot_p),sqrt_dot_p_d,st_sqrt_dot_p_d,gpu_stream)
+  call gpu_malloc_all(sqrt_dot_p_d, st_sqrt_dot_p,gpu_stream)
+  call cpy_htod(c_loc(sqrt_dot_p),sqrt_dot_p_d,st_sqrt_dot_p,gpu_stream)
 
   if( do_derivatives )then
 !   Derivatives of the SOAP descriptor in spherical coordinates
@@ -751,7 +753,7 @@ module soap_turbo_desc
 
   write(*,*) 
   write(*,*) "Before normalize soap_d."
-  write(*,*) st_soap_d, st_sqrt_dot_p_d
+  write(*,*) st_soap_d, st_sqrt_dot_p
   write(*,*) 
   call gpu_soap_normalize(soap_d, sqrt_dot_p_d, n_soap, n_sites, gpu_stream)
   call cpy_dtoh(soap_d,c_loc(soap),st_soap_d,gpu_stream)
