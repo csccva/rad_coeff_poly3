@@ -729,9 +729,9 @@ module soap_turbo_desc
     call cpy_htod(c_loc(n_neigh),n_neigh_d, st_n_sites_int,gpu_stream)
 
 
-    ! write(*,*) 
-    ! write(*,*) n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh
-    ! write(*,*) 
+    write(*,*) 
+    write(*,*) n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh
+    write(*,*) 
     ! stop
     call gpu_get_soap_der(soap_d, sqrt_dot_p_d, soap_cart_der_d, &
           soap_rad_der_d, soap_azi_der_d, soap_pol_der_d, &

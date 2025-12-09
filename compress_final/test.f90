@@ -35,9 +35,11 @@ program test_compress
 
    
    open(unit=5,file="soap_cpu.output",status="unknown")
-   do i=1,n_soap
-      write(5, *) soap(i, i_site_one), &
-                  soap_cart_der(1, i, i_site_der),soap_cart_der(2, i, i_site_der),soap_cart_der(3, i, i_site_der)
+   do i_site_one=1,n_sites
+      do i=1,n_soap
+         write(5, *) i_site_one, soap(i, i_site_one), &
+                  soap_cart_der(1, i, i_site_one),soap_cart_der(2, i, i_site_one),soap_cart_der(3, i, i_site_one)
+      enddo
    enddo
    close(5)
    
@@ -51,10 +53,11 @@ program test_compress
                           compress_P_el, soap, soap_cart_der)
 
    open(unit=5,file="soap_gpu.output",status="unknown")
-
-   do i=1,n_soap
-      write(5, *) soap(i, i_site_one), &
-                  soap_cart_der(1, i, i_site_der),soap_cart_der(2, i, i_site_der),soap_cart_der(3, i, i_site_der)
+   do i_site_one=1,n_sites
+      do i=1,n_soap
+         write(5, *) i_site_one, soap(i, i_site_one), &
+                  soap_cart_der(1, i, i_site_one),soap_cart_der(2, i, i_site_one),soap_cart_der(3, i, i_site_one)
+      enddo
    enddo
    close(5)
 
