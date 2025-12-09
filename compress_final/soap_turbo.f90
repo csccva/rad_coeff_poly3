@@ -44,14 +44,14 @@ module soap_turbo_desc
 
 !-------------------
 ! Input variables
-  real*8, intent(in) :: rjs(:), thetas(:), phis(:)
+  real*8, intent(in),target  :: rjs(:), thetas(:), phis(:)
   real*8, intent(in) :: amplitude_scaling(:), atom_sigma_r_scaling(:), atom_sigma_t(:), atom_sigma_t_scaling(:)
   real*8, intent(in) :: central_weight(:), atom_sigma_r(:), global_scaling(:)
   real*8, intent(in) :: nf(:), rcut_hard(:), rcut_soft(:)
   real*8, intent(in) :: compress_P_el(:)
 
   integer, intent(in) :: n_species, radial_enhancement, species(:,:), species_multiplicity(:)
-  integer, intent(in) :: n_sites, n_neigh(:), l_max, n_atom_pairs, alpha_max(:), compress_P_nonzero, &
+  integer, intent(in), target :: n_sites, n_neigh(:), l_max, n_atom_pairs, alpha_max(:), compress_P_nonzero, &
                          compress_P_i(:), compress_P_j(:)
 
   logical, intent(in) :: do_derivatives, do_timing, mask(:,:), compress_soap
@@ -73,7 +73,7 @@ module soap_turbo_desc
   real*8, allocatable, save :: W(:,:), S(:,:), multiplicity_array(:)
   real*8, allocatable,target :: soap_rad_der(:,:), sqrt_dot_p(:), soap_azi_der(:,:)
   real*8, allocatable :: W_temp(:,:), S_temp(:,:)
-  real*8, allocatable :: radial_exp_coeff(:,:), soap_pol_der(:,:)
+  real*8, allocatable, target :: radial_exp_coeff(:,:), soap_pol_der(:,:)
   real*8, allocatable :: preflm(:), plm_array(:), prefl(:), fact_array(:), prefl_rad_der(:)
   real*8, allocatable :: radial_exp_coeff_der(:,:)
   real*8, allocatable :: this_soap(:), this_soap_rad_der(:), this_soap_azi_der(:), this_soap_pol_der(:)
@@ -98,6 +98,14 @@ module soap_turbo_desc
   integer :: maxneigh
   integer(c_size_t) :: st_n_atom_pairs_double, st_n_sites_double
   integer(c_size_t) :: st_soap_rap_der
+  type(c_ptr) :: soap_cart_der_d,soap_rad_der_d, soap_azi_der_d, soap_pol_der_d
+  type(c_ptr) :: skip_soap_component_d, multiplicity_array_d
+  type(c_ptr) :: cnk_d, cnk_rad_der_d, cnk_azi_der_d, cnk_pol_der_d
+  type(c_ptr) :: thetas_d, phis_d,rjs_d
+  integer(c_size_t) :: st_size_thetas, st_size_phis, st_size_rjs
+  integer(c_size_t) ::  st_size_soap_cart_der
+  integer(c_size_t) ::  st_size_soap_rad_der, st_size_soap_pol_der,st_size_soap_azi_der
+  integer(c_size_t) ::  st_size_n_neigh
 
 !-------------------
 
@@ -664,40 +672,74 @@ module soap_turbo_desc
      call gpu_malloc_all(k3_index_d,st_n_atom_pairs_int,gpu_stream)
      call cpy_htod(c_loc(k3_index),k3_index_d, st_n_atom_pairs_int, gpu_stream)
 
-    k2 = 0
-    do i = 1, n_sites
-      do j = 1, n_neigh(i)
-        this_soap_rad_der = 0.d0
-        this_soap_azi_der = 0.d0
-        this_soap_pol_der = 0.d0
-        k2 = k2 + 1
-        if( j == 1 )then
-          k3 = k2
-        else
-          soap_cart_der(1, 1:n_soap, k2) = dsin(thetas(k2)) * dcos(phis(k2)) * soap_rad_der(1:n_soap, k2) - &
-                                           dcos(thetas(k2)) * dcos(phis(k2)) / rjs(k2) * soap_pol_der(1:n_soap, k2) - &
-                                           dsin(phis(k2)) / rjs(k2) * soap_azi_der(1:n_soap, k2)
-          soap_cart_der(2, 1:n_soap, k2) = dsin(thetas(k2)) * dsin(phis(k2)) * soap_rad_der(1:n_soap, k2) - &
-                                           dcos(thetas(k2)) * dsin(phis(k2)) / rjs(k2) * soap_pol_der(1:n_soap, k2) + &
-                                           dcos(phis(k2)) / rjs(k2) * soap_azi_der(1:n_soap, k2)
-          soap_cart_der(3, 1:n_soap, k2) = dcos(thetas(k2)) * soap_rad_der(1:n_soap, k2) + &
-                                           dsin(thetas(k2)) / rjs(k2) * soap_pol_der(1:n_soap, k2)
+    ! k2 = 0
+    ! do i = 1, n_sites
+    !   do j = 1, n_neigh(i)
+    !     this_soap_rad_der = 0.d0
+    !     this_soap_azi_der = 0.d0
+    !     this_soap_pol_der = 0.d0
+    !     k2 = k2 + 1
+    !     if( j == 1 )then
+    !       k3 = k2
+    !     else
+    !       soap_cart_der(1, 1:n_soap, k2) = dsin(thetas(k2)) * dcos(phis(k2)) * soap_rad_der(1:n_soap, k2) - &
+    !                                        dcos(thetas(k2)) * dcos(phis(k2)) / rjs(k2) * soap_pol_der(1:n_soap, k2) - &
+    !                                        dsin(phis(k2)) / rjs(k2) * soap_azi_der(1:n_soap, k2)
+    !       soap_cart_der(2, 1:n_soap, k2) = dsin(thetas(k2)) * dsin(phis(k2)) * soap_rad_der(1:n_soap, k2) - &
+    !                                        dcos(thetas(k2)) * dsin(phis(k2)) / rjs(k2) * soap_pol_der(1:n_soap, k2) + &
+    !                                        dcos(phis(k2)) / rjs(k2) * soap_azi_der(1:n_soap, k2)
+    !       soap_cart_der(3, 1:n_soap, k2) = dcos(thetas(k2)) * soap_rad_der(1:n_soap, k2) + &
+    !                                        dsin(thetas(k2)) / rjs(k2) * soap_pol_der(1:n_soap, k2)
 !         MAKE SURE THAT THIS IS CORRECT FOR THE CENTRAL ATOM DERIVATIVES
-          soap_cart_der(1, 1:n_soap, k3) = soap_cart_der(1, 1:n_soap, k3) - soap_cart_der(1, 1:n_soap, k2)
-          soap_cart_der(2, 1:n_soap, k3) = soap_cart_der(2, 1:n_soap, k3) - soap_cart_der(2, 1:n_soap, k2)
-          soap_cart_der(3, 1:n_soap, k3) = soap_cart_der(3, 1:n_soap, k3) - soap_cart_der(3, 1:n_soap, k2)
-        end if
-      end do
-    end do
-    deallocate( this_soap_rad_der, this_soap_azi_der, this_soap_pol_der )
+          ! soap_cart_der(1, 1:n_soap, k3) = soap_cart_der(1, 1:n_soap, k3) - soap_cart_der(1, 1:n_soap, k2)
+          ! soap_cart_der(2, 1:n_soap, k3) = soap_cart_der(2, 1:n_soap, k3) - soap_cart_der(2, 1:n_soap, k2)
+          ! soap_cart_der(3, 1:n_soap, k3) = soap_cart_der(3, 1:n_soap, k3) - soap_cart_der(3, 1:n_soap, k2)
+    !     end if
+    !   end do
+    ! end do
+    ! deallocate( this_soap_rad_der, this_soap_azi_der, this_soap_pol_der )
+    st_size_soap_azi_der=sizeof(soap_azi_der)
+    call gpu_malloc_all(soap_azi_der_d,st_size_soap_azi_der,gpu_stream)
+    call cpy_htod(c_loc(soap_azi_der),soap_azi_der_d,st_size_soap_azi_der,gpu_stream)
 
-    !  call gpu_get_soap_der(soap_d, sqrt_dot_p_d, soap_cart_der_d, &
-    !       soap_rad_der_d, soap_azi_der_d, soap_pol_der_d, &
-    !       thetas_d,phis_d,rjs_d, & 
-    !       multiplicity_array_d, &
-    !       cnk_d, cnk_rad_der_d, cnk_azi_der_d, cnk_pol_der_d, &
-    !       n_neigh_d, i_k2_start_d, k2_i_site_d, k3_index_d, skip_soap_component_d, &
-    !       n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh, gpu_stream) 
+    st_size_soap_pol_der=sizeof(soap_pol_der)
+    call gpu_malloc_all(soap_pol_der_d,st_size_soap_pol_der,gpu_stream)
+    call cpy_htod(c_loc(soap_pol_der),soap_pol_der_d,st_size_soap_pol_der,gpu_stream)
+
+    st_size_soap_rad_der=sizeof(soap_rad_der)
+    call gpu_malloc_all(soap_rad_der_d,st_size_soap_rad_der,gpu_stream)
+    call cpy_htod(c_loc(soap_rad_der),soap_rad_der_d,st_size_soap_rad_der,gpu_stream)
+
+    st_size_soap_cart_der=sizeof(soap_cart_der)
+    call gpu_malloc_all(soap_cart_der_d,st_size_soap_cart_der,gpu_stream)
+    call cpy_htod(c_loc(soap_cart_der),soap_cart_der_d,st_size_soap_cart_der,gpu_stream)
+
+    st_size_thetas=sizeof(thetas)
+    call gpu_malloc_all(thetas_d,st_size_thetas,gpu_stream)
+    call cpy_htod(c_loc(thetas),thetas_d,st_size_thetas,gpu_stream)
+    st_size_phis=sizeof(phis)
+    call gpu_malloc_all(phis_d,st_size_phis,gpu_stream)
+    call cpy_htod(c_loc(phis),phis_d,st_size_phis,gpu_stream)
+    st_size_rjs=sizeof(rjs)
+    call gpu_malloc_all(rjs_d,st_size_rjs,gpu_stream)
+    call cpy_htod(c_loc(rjs),rjs_d,st_size_rjs,gpu_stream)
+    
+    st_size_n_neigh=sizeof(n_neigh)
+    call gpu_malloc_all(n_neigh_d,st_n_sites_int,gpu_stream)
+    call cpy_htod(c_loc(n_neigh),n_neigh_d, st_n_sites_int,gpu_stream)
+
+
+    ! write(*,*) 
+    ! write(*,*) n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh
+    ! write(*,*) 
+    ! stop
+    call gpu_get_soap_der(soap_d, sqrt_dot_p_d, soap_cart_der_d, &
+          soap_rad_der_d, soap_azi_der_d, soap_pol_der_d, &
+          thetas_d,phis_d,rjs_d, & 
+          multiplicity_array_d, &
+          cnk_d, cnk_rad_der_d, cnk_azi_der_d, cnk_pol_der_d, &
+          n_neigh_d, i_k2_start_d, k2_i_site_d, k3_index_d, skip_soap_component_d, &
+          n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh, gpu_stream) 
 
 !****************************
 ! Uncomment for detailed timing check
@@ -713,7 +755,9 @@ module soap_turbo_desc
   write(*,*) 
   call gpu_soap_normalize(soap_d, sqrt_dot_p_d, n_soap, n_sites, gpu_stream)
   call cpy_dtoh(soap_d,c_loc(soap),st_soap_d,gpu_stream)
+  call cpy_dtoh(soap_cart_der_d,c_loc(soap_cart_der), st_size_soap_cart_der, gpu_stream)
 
+  call gpu_free_async(soap_cart_der_d,gpu_stream)
   call gpu_free_async(soap_d,gpu_stream)
   call gpu_free_async(sqrt_dot_p_d,gpu_stream)
   call gpu_device_sync()

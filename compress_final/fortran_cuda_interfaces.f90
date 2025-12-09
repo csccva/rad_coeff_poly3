@@ -90,5 +90,26 @@ MODULE F_B_C
         integer(c_int),value :: n_sites, n_soap
       end subroutine
 
+
+
+      subroutine gpu_get_soap_der(soap_d, sqrt_dot_d, soap_cart_der_d, &
+                                  soap_rad_der_d, soap_azi_der_d, soap_pol_der_d, &
+                                  thetas_d, phis_d, rjs_d, &
+                                  multiplicity_array_d, &
+                                  cnk_d, cnk_rad_der_d, cnk_azi_der_d, cnk_pol_der_d, &
+                                  n_neigh_d, i_k2_start_d, k2_i_site_d, k3_index_d, skip_soap_component_d, &
+                                  n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh, gpu_stream)  &
+                  bind(C,name="gpu_get_soap_der")
+        use iso_c_binding
+        type(c_ptr), value :: sqrt_dot_d, soap_d, soap_cart_der_d
+        type(c_ptr) :: gpu_stream
+        type(c_ptr), value :: soap_rad_der_d, soap_azi_der_d, soap_pol_der_d
+        type(c_ptr), value :: thetas_d, phis_d, rjs_d
+        type(c_ptr), value :: n_neigh_d, i_k2_start_d, k2_i_site_d, k3_index_d, skip_soap_component_d
+        type(c_ptr), value :: cnk_d, cnk_rad_der_d, cnk_azi_der_d, cnk_pol_der_d
+        type(c_ptr), value :: multiplicity_array_d
+        integer(c_int),value :: n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh
+      end subroutine
+
     END INTERFACE
   END MODULE F_B_C
