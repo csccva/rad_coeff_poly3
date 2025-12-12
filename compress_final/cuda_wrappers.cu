@@ -168,7 +168,6 @@ __global__ void cuda_get_soap_der_one(double *soap_rad_der_d, double *soap_azi_d
 
  __global__ void cuda_get_soap_der_two_one(double *soap_d, double *sqrt_dot_p_d,
                                       double *soap_rad_der_d, double *soap_azi_der_d, double *soap_pol_der_d,
-                                      double *trans_soap_rad_der_d, double *trans_soap_azi_der_d, double *trans_soap_pol_der_d,
                                       double *tdotoprod_der_rad, double *tdotoprod_der_azi, double *tdotoprod_der_pol,
                                       int *k2_i_site_d, 
                                       int n_sites, int n_atom_pairs, int n_soap, int k_max, int n_max, int l_max)
@@ -338,11 +337,15 @@ __global__ void naive_transpose_cnk_arrays(hipDoubleComplex *C,
 
 extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *soap_cart_der_d, 
                                  double *soap_rad_der_d, double *soap_azi_der_d, double *soap_pol_der_d, 
+                                 double *unc_soap_rad_der_d, double *unc_soap_azi_der_d, double *unc_soap_pol_der_d, 
+                                 double *tdotoprod_der_azi,double *tdotoprod_der_rad,double *tdotoprod_der_pol,
+                                 double *trans_soap_azi_der_d,double *trans_soap_rad_der_d,double *trans_soap_pol_der_d,
                                  double *thetas_d, double *phis_d, double *rjs_d, 
                                  double *multiplicity_array_d,
                                  hipDoubleComplex *cnk_d, 
                                  hipDoubleComplex *cnk_rad_der_d, hipDoubleComplex *cnk_azi_der_d, hipDoubleComplex *cnk_pol_der_d, 
                                  int *n_neigh_d, int *i_k2_start_d, int *k2_i_site_d, int *k3_index_d, bool *skip_soap_component_d, 
+                                 bool compress_soap,
                                  int n_sites, int n_atom_pairs, int n_soap, int k_max, int n_max, int l_max, int maxneigh, hipStream_t *stream )
 {
   dim3 nblocks=dim3((n_atom_pairs-1+tpb)/tpb,1,1);
@@ -360,11 +363,12 @@ extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *so
   hipMallocAsync((void**)&tdotoprod_der_azi,sizeof(double)*n_atom_pairs*n_soap,stream[0]);
   hipMallocAsync((void**)&tdotoprod_der_pol,sizeof(double)*n_atom_pairs*n_soap,stream[0]);
   */
+  /*
   double *trans_soap_rad_der_d, *trans_soap_azi_der_d, *trans_soap_pol_der_d;
   hipMallocAsync((void **)&trans_soap_rad_der_d, sizeof(double)*n_atom_pairs*n_soap,stream[0]);
   hipMallocAsync((void **)&trans_soap_azi_der_d, sizeof(double)*n_atom_pairs*n_soap,stream[0]);
   hipMallocAsync((void **)&trans_soap_pol_der_d, sizeof(double)*n_atom_pairs*n_soap,stream[0]);
-
+  */
   /*                                          
   cuda_get_soap_der_one<<< nblocks_get_soap_der_one, nthreads_get_soap_der_one,0, stream[0]>>>(soap_rad_der_d,soap_azi_der_d, soap_pol_der_d, multiplicity_array_d, 
                                                trans_soap_rad_der_d, trans_soap_azi_der_d, trans_soap_pol_der_d, 
@@ -384,22 +388,26 @@ extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *so
   naive_transpose_soap_rad_azi_pol<<<(n_soap*n_atom_pairs+tpb-1)/tpb, tpb,0,  stream[0]>>>(trans_soap_pol_der_d,
                                             soap_pol_der_d, 
                                             n_atom_pairs,n_soap);          */                           
-  /*//gpuErrchk( hipDeviceSynchronize() );
+  //gpuErrchk( hipDeviceSynchronize() );
+  
   cuda_get_soap_der_two_one<<<n_atom_pairs, nthreads,0, stream[0]>>>(soap_d,sqrt_dot_d, 
-                                               soap_rad_der_d,soap_azi_der_d, soap_pol_der_d,
-                                               trans_soap_rad_der_d, trans_soap_azi_der_d, trans_soap_pol_der_d,    
+                                               soap_rad_der_d,soap_azi_der_d, soap_pol_der_d,  
                                                tdotoprod_der_rad, tdotoprod_der_azi, tdotoprod_der_pol,                                            
                                                k2_i_site_d, 
                                                n_sites,  n_atom_pairs, n_soap,  k_max, n_max, l_max);
   //printf("%d %d  %d  %d  %d  %d  %d \n", n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh);
   //gpuErrchk( hipDeviceSynchronize() );
-  cuda_get_soap_der_two_two<<<n_atom_pairs, nthreads,0, stream[0]>>>(soap_d, sqrt_dot_d,
-                                               soap_rad_der_d,soap_azi_der_d, soap_pol_der_d,
-                                               //trans_soap_rad_der_d, trans_soap_azi_der_d, trans_soap_pol_der_d,  
+  cuda_get_soap_der_two_one_compress<<<n_atom_pairs, nthreads,0, stream[0]>>>(soap_rad_der_d,soap_azi_der_d, soap_pol_der_d,
+                                               unc_soap_rad_der_d, unc_soap_azi_der_d, unc_soap_pol_der_d,                          
                                                tdotoprod_der_rad, tdotoprod_der_azi, tdotoprod_der_pol,                                               
                                                k2_i_site_d, 
                                                n_sites,  n_atom_pairs, n_soap,  k_max, n_max, l_max);
-  */
+  cuda_get_soap_der_two_two<<<n_atom_pairs, nthreads,0, stream[0]>>>(soap_d, sqrt_dot_d,
+                                               soap_rad_der_d,soap_azi_der_d, soap_pol_der_d,
+                                               tdotoprod_der_rad, tdotoprod_der_azi, tdotoprod_der_pol,                                               
+                                               k2_i_site_d, 
+                                               n_sites,  n_atom_pairs, n_soap,  k_max, n_max, l_max);
+
  cuda_get_soap_der_thr_one<<<n_atom_pairs, nthreads,0, stream[0]>>>(soap_cart_der_d,  
                                                          soap_rad_der_d,soap_azi_der_d, soap_pol_der_d, 
                                                          thetas_d, phis_d, rjs_d,
@@ -413,7 +421,7 @@ extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *so
   
   
   //hipFreeAsync(tdotoprod_der_rad,   stream[0]);hipFreeAsync(tdotoprod_der_azi,   stream[0]);hipFreeAsync(tdotoprod_der_pol,   stream[0]);
-  hipFreeAsync(trans_soap_rad_der_d,stream[0]);hipFreeAsync(trans_soap_azi_der_d,stream[0]);hipFreeAsync(trans_soap_pol_der_d,stream[0]); 
+  //hipFreeAsync(trans_soap_rad_der_d,stream[0]);hipFreeAsync(trans_soap_azi_der_d,stream[0]);hipFreeAsync(trans_soap_pol_der_d,stream[0]); 
   
   return;
 }
