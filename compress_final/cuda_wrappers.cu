@@ -335,6 +335,38 @@ __global__ void naive_transpose_cnk_arrays(hipDoubleComplex *C,
   }
 }
 
+__global__ void cuda_get_soap_der_two_one_compress(double *soap_rad_der_d,double *soap_azi_der_d,double *soap_pol_der_d,
+                                   double *unc_soap_rad_der_d,double * unc_soap_azi_der_d, double *unc_soap_pol_der_d,                                                                  
+                                   int *compress_P_i, int *compress_P_j, double *compress_P_el,
+                                   bool compress_soap,
+                                   int n_sites, int n_atom_pairs, int n_soap, int comp_P_nz, int n_soap_uncompressed,
+                                   int k_max, int n_max, int l_max)
+{
+  int k2 = threadIdx.x+blockIdx.x*blockDim.x;
+  if (k2<n_atom_pairs){
+    if(compress_soap){
+      for(int ik=0; ik<comp_P_nz; ik++){
+        int i=compress_P_i[ik]-1;int j=compress_P_j[ik]-1;
+        int idi=k2*n_soap+i;
+        int idj=k2*n_soap_uncompressed+j;
+        soap_rad_der_d[idi]+=compress_P_el[ik]*unc_soap_rad_der_d[idj];
+        soap_azi_der_d[idi]+=compress_P_el[ik]*unc_soap_azi_der_d[idj];
+        soap_pol_der_d[idi]+=compress_P_el[ik]*unc_soap_pol_der_d[idj];
+
+      }
+
+    }
+    else{
+      for(int is=0;is<n_soap;is++){
+        int idx=k2*n_soap+is;
+        soap_rad_der_d[idx]=unc_soap_rad_der_d[idx];
+        soap_azi_der_d[idx]=unc_soap_azi_der_d[idx];
+        soap_pol_der_d[idx]=unc_soap_pol_der_d[idx];
+      }
+    }
+  }
+}
+
 extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *soap_cart_der_d, 
                                  double *soap_rad_der_d, double *soap_azi_der_d, double *soap_pol_der_d, 
                                  double *unc_soap_rad_der_d, double *unc_soap_azi_der_d, double *unc_soap_pol_der_d, 
@@ -346,7 +378,9 @@ extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *so
                                  hipDoubleComplex *cnk_rad_der_d, hipDoubleComplex *cnk_azi_der_d, hipDoubleComplex *cnk_pol_der_d, 
                                  int *n_neigh_d, int *i_k2_start_d, int *k2_i_site_d, int *k3_index_d, bool *skip_soap_component_d, 
                                  bool compress_soap,
-                                 int n_sites, int n_atom_pairs, int n_soap, int k_max, int n_max, int l_max, int maxneigh, hipStream_t *stream )
+                                 int *compress_P_i, int *compress_P_j, double *compress_P_el,
+                                 int n_sites, int n_atom_pairs, int n_soap, int comp_P_nz, int n_soap_uncompressed,
+                                 int k_max, int n_max, int l_max, int maxneigh, hipStream_t *stream )
 {
   dim3 nblocks=dim3((n_atom_pairs-1+tpb)/tpb,1,1);
   dim3 nthreads=dim3(tpb,1,1);
@@ -389,6 +423,12 @@ extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *so
                                             soap_pol_der_d, 
                                             n_atom_pairs,n_soap);          */                           
   //gpuErrchk( hipDeviceSynchronize() );
+  cuda_get_soap_der_two_one_compress<<<nblocks_get_soap_der_one, nthreads,0, stream[0]>>>(soap_rad_der_d,soap_azi_der_d, soap_pol_der_d,
+                                               unc_soap_rad_der_d, unc_soap_azi_der_d, unc_soap_pol_der_d,                                            
+                                               compress_P_i, compress_P_j, compress_P_el,
+                                               compress_soap,
+                                               n_sites,  n_atom_pairs, n_soap, comp_P_nz,n_soap_uncompressed,
+                                               k_max, n_max, l_max);
   
   cuda_get_soap_der_two_one<<<n_atom_pairs, nthreads,0, stream[0]>>>(soap_d,sqrt_dot_d, 
                                                soap_rad_der_d,soap_azi_der_d, soap_pol_der_d,  
@@ -397,11 +437,7 @@ extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *so
                                                n_sites,  n_atom_pairs, n_soap,  k_max, n_max, l_max);
   //printf("%d %d  %d  %d  %d  %d  %d \n", n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh);
   //gpuErrchk( hipDeviceSynchronize() );
-  cuda_get_soap_der_two_one_compress<<<n_atom_pairs, nthreads,0, stream[0]>>>(soap_rad_der_d,soap_azi_der_d, soap_pol_der_d,
-                                               unc_soap_rad_der_d, unc_soap_azi_der_d, unc_soap_pol_der_d,                          
-                                               tdotoprod_der_rad, tdotoprod_der_azi, tdotoprod_der_pol,                                               
-                                               k2_i_site_d, 
-                                               n_sites,  n_atom_pairs, n_soap,  k_max, n_max, l_max);
+
   cuda_get_soap_der_two_two<<<n_atom_pairs, nthreads,0, stream[0]>>>(soap_d, sqrt_dot_d,
                                                soap_rad_der_d,soap_azi_der_d, soap_pol_der_d,
                                                tdotoprod_der_rad, tdotoprod_der_azi, tdotoprod_der_pol,                                               

@@ -48,7 +48,7 @@ module soap_turbo_desc
   real*8, intent(in) :: amplitude_scaling(:), atom_sigma_r_scaling(:), atom_sigma_t(:), atom_sigma_t_scaling(:)
   real*8, intent(in) :: central_weight(:), atom_sigma_r(:), global_scaling(:)
   real*8, intent(in) :: nf(:), rcut_hard(:), rcut_soft(:)
-  real*8, intent(in) :: compress_P_el(:)
+  real*8, intent(in),target :: compress_P_el(:)
 
   integer, intent(in) :: n_species, radial_enhancement, species(:,:), species_multiplicity(:)
   integer, intent(in), target :: n_sites, n_neigh(:), l_max, n_atom_pairs, alpha_max(:), compress_P_nonzero, &
@@ -60,6 +60,7 @@ module soap_turbo_desc
 
 ! Output variables
   real*8, intent(inout),target :: soap(:,:), soap_cart_der(:,:,:)
+  integer(c_int) :: comp_P_nz
 !-------------------
 
 
@@ -113,6 +114,8 @@ module soap_turbo_desc
   integer(c_size_t) :: st_size_g_this_soap_rad_der, st_size_g_this_soap_azi_der, st_size_g_this_soap_pol_der
   type(c_ptr) :: g_this_soap_rad_der_d, g_this_soap_azi_der_d, g_this_soap_pol_der_d
   logical(c_bool) :: c_compress_soap
+  integer(c_size_t) :: st_size_comp_i,st_size_comp_j,st_size_comp_el
+  type(c_ptr) :: compress_P_i_d,compress_P_j_d,compress_P_el_d
 !-------------------
 
   if( do_timing )then
@@ -434,12 +437,6 @@ module soap_turbo_desc
     coeff_time = time2 - time1
   end if
 
-
-
-
-
-
-
 !  write(*,*) "Building SOAP vectors..."
 
   if( do_timing )then
@@ -553,6 +550,19 @@ module soap_turbo_desc
   deallocate( this_soap )
 
 
+  comp_P_nz=compress_P_nonzero
+  st_size_comp_i=sizeof(compress_P_i)
+  st_size_comp_j=sizeof(compress_P_j)
+  st_size_comp_el=sizeof(compress_P_el)
+
+  call gpu_malloc_all(compress_P_i_d,st_size_comp_i,gpu_stream)
+  call gpu_malloc_all(compress_P_j_d,st_size_comp_j,gpu_stream)
+  call gpu_malloc_all(compress_P_el_d,st_size_comp_el,gpu_stream)
+
+  call cpy_htod(c_loc(compress_P_el), compress_P_el_d,st_size_comp_el,gpu_stream)
+  call cpy_htod(c_loc(compress_P_i), compress_P_i_d,st_size_comp_i,gpu_stream)
+  call cpy_htod(c_loc(compress_P_j), compress_P_j_d,st_size_comp_j,gpu_stream)
+
   st_soap_d=sizeof(soap)
   st_sqrt_dot_p=sizeof(sqrt_dot_p)
 
@@ -575,6 +585,10 @@ module soap_turbo_desc
     allocate( g_this_soap_rad_der(1:n_soap_uncompressed, 1:n_atom_pairs) )
     allocate( g_this_soap_azi_der(1:n_soap_uncompressed, 1:n_atom_pairs) )
     allocate( g_this_soap_pol_der(1:n_soap_uncompressed, 1:n_atom_pairs) )
+    
+    g_this_soap_rad_der=0.0
+    g_this_soap_azi_der=0.0
+    g_this_soap_pol_der=0.0
     k2 = 0
     do i = 1, n_sites
       do j = 1, n_neigh(i)
@@ -637,36 +651,39 @@ module soap_turbo_desc
     call cpy_htod(c_loc(g_this_soap_azi_der),g_this_soap_azi_der_d,st_size_g_this_soap_azi_der,gpu_stream)
     call cpy_htod(c_loc(g_this_soap_pol_der),g_this_soap_pol_der_d,st_size_g_this_soap_pol_der,gpu_stream)
 
-
-    k2 = 0
-    do i = 1, n_sites
-      do j = 1, n_neigh(i)
-        this_soap_rad_der = 0.d0
-        this_soap_azi_der = 0.d0
-        this_soap_pol_der = 0.d0
-        k2 = k2 + 1
-        if( compress_soap )then
-           do k = 1, compress_P_nonzero
-          !   soap_rad_der(compress_P_i(k), k2) = soap_rad_der(compress_P_i(k), k2) + compress_P_el(k) * &
-          !                                       this_soap_rad_der(compress_P_j(k))
-          !   soap_azi_der(compress_P_i(k), k2) = soap_azi_der(compress_P_i(k), k2) + compress_P_el(k) * &
-          !                                       this_soap_azi_der(compress_P_j(k))
-          !   soap_pol_der(compress_P_i(k), k2) = soap_pol_der(compress_P_i(k), k2) + compress_P_el(k) * &
-          !                                       this_soap_pol_der(compress_P_j(k))
-            soap_rad_der(compress_P_i(k), k2) = soap_rad_der(compress_P_i(k), k2) + compress_P_el(k) * &
-                                                g_this_soap_rad_der(compress_P_j(k), k2)
-            soap_azi_der(compress_P_i(k), k2) = soap_azi_der(compress_P_i(k), k2) + compress_P_el(k) * &
-                                                g_this_soap_azi_der(compress_P_j(k), k2)
-            soap_pol_der(compress_P_i(k), k2) = soap_pol_der(compress_P_i(k), k2) + compress_P_el(k) * &
-                                                g_this_soap_pol_der(compress_P_j(k), k2)
-          end do
-        else
-          soap_rad_der(:,k2) = g_this_soap_rad_der(:,k2)
-          soap_azi_der(:,k2) = g_this_soap_azi_der(:,k2)
-          soap_pol_der(:,k2) = g_this_soap_pol_der(:,k2)
-        end if
-      end do
-    end do
+    
+    soap_azi_der=0.0
+    soap_rad_der=0.0
+    soap_pol_der=0.0
+    ! k2 = 0
+    ! do i = 1, n_sites
+    !   do j = 1, n_neigh(i)
+    !     this_soap_rad_der = 0.d0
+    !     this_soap_azi_der = 0.d0
+    !     this_soap_pol_der = 0.d0
+    !     k2 = k2 + 1
+    !     if( compress_soap )then
+    !        do k = 1, compress_P_nonzero
+    !       !   soap_rad_der(compress_P_i(k), k2) = soap_rad_der(compress_P_i(k), k2) + compress_P_el(k) * &
+    !       !                                       this_soap_rad_der(compress_P_j(k))
+    !       !   soap_azi_der(compress_P_i(k), k2) = soap_azi_der(compress_P_i(k), k2) + compress_P_el(k) * &
+    !       !                                       this_soap_azi_der(compress_P_j(k))
+    !       !   soap_pol_der(compress_P_i(k), k2) = soap_pol_der(compress_P_i(k), k2) + compress_P_el(k) * &
+    !       !                                       this_soap_pol_der(compress_P_j(k))
+    !         soap_rad_der(compress_P_i(k), k2) = soap_rad_der(compress_P_i(k), k2) + compress_P_el(k) * &
+    !                                             g_this_soap_rad_der(compress_P_j(k), k2)
+    !         soap_azi_der(compress_P_i(k), k2) = soap_azi_der(compress_P_i(k), k2) + compress_P_el(k) * &
+    !                                             g_this_soap_azi_der(compress_P_j(k), k2)
+    !         soap_pol_der(compress_P_i(k), k2) = soap_pol_der(compress_P_i(k), k2) + compress_P_el(k) * &
+    !                                             g_this_soap_pol_der(compress_P_j(k), k2)
+    !       end do
+    !     else
+    !       soap_rad_der(:,k2) = g_this_soap_rad_der(:,k2)
+    !       soap_azi_der(:,k2) = g_this_soap_azi_der(:,k2)
+    !       soap_pol_der(:,k2) = g_this_soap_pol_der(:,k2)
+    !     end if
+    !   end do
+    ! end do
     
 
     allocate(k3_index(1:n_atom_pairs))
@@ -707,6 +724,7 @@ module soap_turbo_desc
         end do
      end do 
     
+    
     st_size_i_k2_start=sizeof(i_k2_start)
     call gpu_malloc_all(i_k2_start_d,st_size_i_k2_start,gpu_stream)
     call cpy_htod(c_loc(i_k2_start),i_k2_start_d,st_size_i_k2_start, gpu_stream)
@@ -731,7 +749,7 @@ module soap_turbo_desc
     t_pol=transpose(soap_pol_der)
     call cpy_htod(c_loc(t_pol),transp_pol_d,st_size_soap_azi_der,gpu_stream)
     call gpu_malloc_all(gdorpro_pol_d,st_size_soap_azi_der,gpu_stream)
-    !call cpy_htod(c_loc(gdorpro_pol),gdorpro_pol_d,st_size_soap_azi_der,gpu_stream)
+    call cpy_htod(c_loc(gdorpro_pol),gdorpro_pol_d,st_size_soap_azi_der,gpu_stream)
 
     st_size_soap_rad_der=sizeof(soap_rad_der)
     call gpu_malloc_all(soap_rad_der_d,st_size_soap_rad_der,gpu_stream)
@@ -763,8 +781,10 @@ module soap_turbo_desc
 
     write(*,*) 
     write(*,*) n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh
+    write(*,*) n_soap, size(soap_azi_der,1), size(soap_azi_der,2), compress_P_nonzero, n_soap_uncompressed
     write(*,*) 
-    ! stop
+    !stop
+    
     call gpu_get_soap_der(soap_d, sqrt_dot_p_d, soap_cart_der_d, &
           soap_rad_der_d, soap_azi_der_d, soap_pol_der_d, &
           g_this_soap_rad_der_d, g_this_soap_azi_der_d, g_this_soap_pol_der_d, &
@@ -775,7 +795,9 @@ module soap_turbo_desc
           cnk_d, cnk_rad_der_d, cnk_azi_der_d, cnk_pol_der_d, &
           n_neigh_d, i_k2_start_d, k2_i_site_d, k3_index_d, skip_soap_component_d, &
           c_compress_soap, &
-          n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh, gpu_stream) 
+          compress_P_i_d, compress_P_j_d, compress_P_el_d, &
+          n_sites, n_atom_pairs, n_soap,comp_P_nz,n_soap_uncompressed, &
+          k_max, n_max, l_max, maxneigh, gpu_stream) 
     
     !call gpu_device_sync()
     !stop

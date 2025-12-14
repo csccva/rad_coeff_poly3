@@ -102,12 +102,15 @@ MODULE F_B_C
                                   cnk_d, cnk_rad_der_d, cnk_azi_der_d, cnk_pol_der_d, &
                                   n_neigh_d, i_k2_start_d, k2_i_site_d, k3_index_d, skip_soap_component_d, &
                                   c_compress_soap, &
-                                  n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh, gpu_stream)  &
+                                  compress_P_i, compress_P_j, compress_P_el, &
+                                  n_sites, n_atom_pairs, n_soap,comp_P_nz, n_soap_uncompressed, &
+                                  k_max, n_max, l_max, maxneigh, gpu_stream)  &
                   bind(C,name="gpu_get_soap_der")
         use iso_c_binding
         type(c_ptr), value :: sqrt_dot_d, soap_d, soap_cart_der_d
         type(c_ptr) :: gpu_stream
         type(c_ptr), value :: soap_rad_der_d, soap_azi_der_d, soap_pol_der_d
+        type(c_ptr), value :: compress_P_i, compress_P_j, compress_P_el
         type(c_ptr), value :: g_this_soap_rad_der_d, g_this_soap_azi_der_d, g_this_soap_pol_der_d
         type(c_ptr), value :: gdorpro_azi_d, gdorpro_rad_d, gdorpro_pol_d
         type(c_ptr), value :: transp_azi_d, transp_rad_d, transp_pol_d
@@ -116,6 +119,7 @@ MODULE F_B_C
         type(c_ptr), value :: cnk_d, cnk_rad_der_d, cnk_azi_der_d, cnk_pol_der_d
         type(c_ptr), value :: multiplicity_array_d
         integer(c_int),value :: n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh
+        integer(c_int),value :: comp_P_nz, n_soap_uncompressed
         logical(c_bool), value :: c_compress_soap
       end subroutine
 
