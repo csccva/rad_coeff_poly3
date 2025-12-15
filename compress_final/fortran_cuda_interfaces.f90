@@ -100,8 +100,8 @@ MODULE F_B_C
                                   thetas_d, phis_d, rjs_d, &
                                   multiplicity_array_d, &
                                   cnk_d, cnk_rad_der_d, cnk_azi_der_d, cnk_pol_der_d, &
-                                  n_neigh_d, i_k2_start_d, k2_i_site_d, k3_index_d, skip_soap_component_d, &
-                                  c_compress_soap, &
+                                  n_neigh_d, i_k2_start_d, k2_i_site_d, k3_index_d, &
+                                  skip_soap_component_flattened_d,c_compress_soap, &
                                   compress_P_i, compress_P_j, compress_P_el, &
                                   n_sites, n_atom_pairs, n_soap,comp_P_nz, n_soap_uncompressed, &
                                   k_max, n_max, l_max, maxneigh, gpu_stream)  &
@@ -115,9 +115,9 @@ MODULE F_B_C
         type(c_ptr), value :: gdorpro_azi_d, gdorpro_rad_d, gdorpro_pol_d
         type(c_ptr), value :: transp_azi_d, transp_rad_d, transp_pol_d
         type(c_ptr), value :: thetas_d, phis_d, rjs_d
-        type(c_ptr), value :: n_neigh_d, i_k2_start_d, k2_i_site_d, k3_index_d, skip_soap_component_d
+        type(c_ptr), value :: n_neigh_d, i_k2_start_d, k2_i_site_d, k3_index_d
         type(c_ptr), value :: cnk_d, cnk_rad_der_d, cnk_azi_der_d, cnk_pol_der_d
-        type(c_ptr), value :: multiplicity_array_d
+        type(c_ptr), value :: multiplicity_array_d,skip_soap_component_flattened_d
         integer(c_int),value :: n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh
         integer(c_int),value :: comp_P_nz, n_soap_uncompressed
         logical(c_bool), value :: c_compress_soap

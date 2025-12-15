@@ -113,58 +113,6 @@ __global__ void cuda_soap_normalize(double *soap_d, double *sqrt_dot_d, int n_so
 extern "C" void gpu_soap_normalize(double *soap_d, double *sqrt_dot_d, int n_soap, int n_sites, hipStream_t *stream ){
   cuda_soap_normalize<<< n_sites, tpb,0,stream[0]>>> (soap_d, sqrt_dot_d, n_soap,n_sites);
 }
-__global__ void cuda_get_soap_der_one(double *soap_rad_der_d, double *soap_azi_der_d, double *soap_pol_der_d, 
-                                      double *multiplicity_array_d, 
-                                      double *trans_soap_rad_der_d, double *trans_soap_azi_der_d,double *trans_soap_pol_der_d,
-                                      hipDoubleComplex *cnk_d, 
-                                      hipDoubleComplex *cnk_rad_der_d, hipDoubleComplex *cnk_azi_der_d, hipDoubleComplex *cnk_pol_der_d,
-                                      int *k2_i_site_d, bool *skip_soap_component_d, 
-                                      int n_sites, int n_atom_pairs, int n_soap, int k_max, int n_max, int l_max)
-{
-  int k2 = threadIdx.x+blockIdx.x*blockDim.x;
-  if (k2<n_atom_pairs){
-    int i_site=k2_i_site_d[k2]-1;
-    int counter=0;
-    int counter2=0; 
-    for(int n=1;n<=n_max;n++){
-      for(int np=n;np<=n_max;np++){
-        for(int l=0;l<=l_max;l++){
-          if(!skip_soap_component_d[l+(l_max+1)*(np-1+(n-1)*n_max)]){ //if( skip_soap_component(l, np, n) )cycle // if it happens lots of time, do it in reverse
-            counter++;
-            double my_soap_rad_der=0; //trans_soap_rad_der_d[k2+(counter-1)*n_atom_pairs]; //soap_rad_der_d[counter-1+k2*n_soap];
-            double my_soap_azi_der=0; //trans_soap_azi_der_d[k2+(counter-1)*n_atom_pairs]; //soap_azi_der_d[counter-1+k2*n_soap];
-            double my_soap_pol_der=0; //trans_soap_pol_der_d[k2+(counter-1)*n_atom_pairs]; //soap_pol_der_d[counter-1+k2*n_soap];
-            for(int m=0;m<=l; m++){
-              int k=1+l*(l+1)/2+m; 
-              counter2++;
-              /* if(threadIdx.x==121 && blockIdx.x==154){
-                printf("\n Pair  %d \n" , k2, i_site);              
-              } */
-              hipDoubleComplex tmp_1_cnk_d=cnk_d[i_site+n_sites*(k-1+(n-1)*k_max)]; //trans_cnk_d[i_site+n_sites*(k-1+(n-1)*k_max)];  //cnk_d[k-1+ k_max*(n-1 +i_site*n_max)];
-              hipDoubleComplex tmp_2_cnk_d=cnk_d[i_site+n_sites*(k-1+(np-1)*k_max)]; //trans_cnk_d[i_site+n_sites*(k-1+(np-1)*k_max)]; //cnk_d[k-1+k_max*(np-1+i_site*n_max)];
-              hipDoubleComplex tmp_1_cnk_rad_d=cnk_rad_der_d[k2+n_atom_pairs*(k-1+(n-1)*k_max) ]; //trans_cnk_rad_der_d[k2+n_atom_pairs*(k-1+(n-1)*k_max) ]; // cnk_rad_der_d[k-1+k_max*(n-1 +k2*n_max)];
-              hipDoubleComplex tmp_2_cnk_rad_d=cnk_rad_der_d[k2+n_atom_pairs*(k-1+(np-1)*k_max)]; //trans_cnk_rad_der_d[k2+n_atom_pairs*(k-1+(np-1)*k_max)]; // cnk_rad_der_d[k-1+k_max*(np-1+k2*n_max)];
-              hipDoubleComplex tmp_1_cnk_azi_d=cnk_azi_der_d[k2+n_atom_pairs*(k-1+(n-1)*k_max) ]; //trans_cnk_azi_der_d[k2+n_atom_pairs*(k-1+(n-1)*k_max) ]; //cnk_azi_der_d[k-1+k_max*(n-1 +k2*n_max)];
-              hipDoubleComplex tmp_2_cnk_azi_d=cnk_azi_der_d[k2+n_atom_pairs*(k-1+(np-1)*k_max)]; //trans_cnk_azi_der_d[k2+n_atom_pairs*(k-1+(np-1)*k_max)]; //cnk_azi_der_d[k-1+k_max*(np-1+k2*n_max)];
-              hipDoubleComplex tmp_1_cnk_pol_d=cnk_pol_der_d[k2+n_atom_pairs*(k-1+(n-1)*k_max) ]; //trans_cnk_pol_der_d[k2+n_atom_pairs*(k-1+(n-1)*k_max) ]; //cnk_pol_der_d[k-1+k_max*(n-1 +k2*n_max)];
-              hipDoubleComplex tmp_2_cnk_pol_d=cnk_pol_der_d[k2+n_atom_pairs*(k-1+(np-1)*k_max)]; //trans_cnk_pol_der_d[k2+n_atom_pairs*(k-1+(np-1)*k_max)]; //cnk_pol_der_d[k-1+k_max*(np-1+k2*n_max)];
-              my_soap_rad_der+=multiplicity_array_d[counter2-1]*(tmp_1_cnk_rad_d.x*tmp_2_cnk_d.x+tmp_1_cnk_rad_d.y*tmp_2_cnk_d.y+
-                                                                 tmp_1_cnk_d.x*tmp_2_cnk_rad_d.x+tmp_1_cnk_d.y*tmp_2_cnk_rad_d.y);
-              my_soap_azi_der+=multiplicity_array_d[counter2-1]*(tmp_1_cnk_azi_d.x*tmp_2_cnk_d.x+tmp_1_cnk_azi_d.y*tmp_2_cnk_d.y+
-                                                                 tmp_1_cnk_d.x*tmp_2_cnk_azi_d.x+tmp_1_cnk_d.y*tmp_2_cnk_azi_d.y);
-              my_soap_pol_der+=multiplicity_array_d[counter2-1]*(tmp_1_cnk_pol_d.x*tmp_2_cnk_d.x+tmp_1_cnk_pol_d.y*tmp_2_cnk_d.y+
-                                                                 tmp_1_cnk_d.x*tmp_2_cnk_pol_d.x+tmp_1_cnk_d.y*tmp_2_cnk_pol_d.y);
-            }   
-            trans_soap_rad_der_d[k2+(counter-1)*n_atom_pairs]=my_soap_rad_der; //soap_rad_der_d[counter-1+k2*n_soap]=my_soap_rad_der;
-            trans_soap_azi_der_d[k2+(counter-1)*n_atom_pairs]=my_soap_azi_der; //soap_azi_der_d[counter-1+k2*n_soap]=my_soap_azi_der;
-            trans_soap_pol_der_d[k2+(counter-1)*n_atom_pairs]=my_soap_pol_der; //soap_pol_der_d[counter-1+k2*n_soap]=my_soap_pol_der;       
-          }
-        }
-      }
-    }
-  }
-}
-
 
  __global__ void cuda_get_soap_der_two_one(double *soap_d, double *sqrt_dot_p_d,
                                       double *soap_rad_der_d, double *soap_azi_der_d, double *soap_pol_der_d,
@@ -367,6 +315,77 @@ __global__ void cuda_get_soap_der_two_one_compress(double *soap_rad_der_d,double
   }
 }
 
+
+__global__ void cuda_get_soap_der_one(double *multiplicity_array_d, 
+                                      double *unc_soap_rad_der_d, double *unc_soap_azi_der_d,double *unc_soap_pol_der_d,
+                                      hipDoubleComplex *cnk_d, 
+                                      hipDoubleComplex *cnk_rad_der_d, hipDoubleComplex *cnk_azi_der_d, hipDoubleComplex *cnk_pol_der_d,
+                                      int *k2_i_site_d, bool *skip_soap_component_flattened,
+                                      int n_sites, int n_atom_pairs, int n_soap,
+                                      int n_soap_uncompressed, int k_max, int n_max, int l_max)
+{
+  int k2 = threadIdx.x+blockIdx.x*blockDim.x;
+  if (k2<n_atom_pairs){
+    int i_site=k2_i_site_d[k2]-1;
+    int counter=0;
+    int counter2=0; 
+    for(int n=1;n<=n_max;n++){
+      for(int np=n;np<=n_max;np++){
+        for(int l=0;l<=l_max;l++){
+          counter++;
+          if(k2==0){
+            //printf("%d %d %d %d", n,np,l,counter);
+          }
+          double my_soap_rad_der=0; //trans_soap_rad_der_d[k2+(counter-1)*n_atom_pairs]; //soap_rad_der_d[counter-1+k2*n_soap];
+          double my_soap_azi_der=0; //trans_soap_azi_der_d[k2+(counter-1)*n_atom_pairs]; //soap_azi_der_d[counter-1+k2*n_soap];
+          double my_soap_pol_der=0; //trans_soap_pol_der_d[k2+(counter-1)*n_atom_pairs]; //soap_pol_der_d[counter-1+k2*n_soap];  
+          // if(k2==0){
+          //   printf("%d %d\n", counter, skip_soap_component_flattened[counter-1]);
+          // }
+          if(!skip_soap_component_flattened[counter-1]){ 
+            for(int m=0;m<=l; m++){
+              int k=1+l*(l+1)/2+m; 
+              counter2++;
+              // if(k2==0){
+              //     printf("%d %d %d %d %d %d %d %lf\n", n,np,l,m,k,counter,counter2, multiplicity_array_d[counter2-1]);
+              // }
+              hipDoubleComplex tmp_1_cnk_d=cnk_d[k-1+ k_max*(n-1 +i_site*n_max)]; //cnk_d[i_site+n_sites*(k-1+(n-1)*k_max)]; //trans_cnk_d[i_site+n_sites*(k-1+(n-1)*k_max)];  //cnk_d[k-1+ k_max*(n-1 +i_site*n_max)];
+              hipDoubleComplex tmp_2_cnk_d=cnk_d[k-1+k_max*(np-1+i_site*n_max)]; //cnk_d[i_site+n_sites*(k-1+(np-1)*k_max)]; //trans_cnk_d[i_site+n_sites*(k-1+(np-1)*k_max)]; //cnk_d[k-1+k_max*(np-1+i_site*n_max)];
+              hipDoubleComplex tmp_1_cnk_rad_d=cnk_rad_der_d[k-1+k_max*(n-1 +k2*n_max)]; //cnk_rad_der_d[k2+n_atom_pairs*(k-1+(n-1)*k_max) ]; //trans_cnk_rad_der_d[k2+n_atom_pairs*(k-1+(n-1)*k_max) ]; // cnk_rad_der_d[k-1+k_max*(n-1 +k2*n_max)];
+              hipDoubleComplex tmp_2_cnk_rad_d=cnk_rad_der_d[k-1+k_max*(np-1+k2*n_max)]; //cnk_rad_der_d[k2+n_atom_pairs*(k-1+(np-1)*k_max)]; //trans_cnk_rad_der_d[k2+n_atom_pairs*(k-1+(np-1)*k_max)]; // cnk_rad_der_d[k-1+k_max*(np-1+k2*n_max)];
+              hipDoubleComplex tmp_1_cnk_azi_d=cnk_azi_der_d[k-1+k_max*(n-1 +k2*n_max)]; //cnk_azi_der_d[k2+n_atom_pairs*(k-1+(n-1)*k_max) ]; //trans_cnk_azi_der_d[k2+n_atom_pairs*(k-1+(n-1)*k_max) ]; //cnk_azi_der_d[k-1+k_max*(n-1 +k2*n_max)];
+              hipDoubleComplex tmp_2_cnk_azi_d=cnk_azi_der_d[k-1+k_max*(np-1+k2*n_max)]; //cnk_azi_der_d[k2+n_atom_pairs*(k-1+(np-1)*k_max)]; //trans_cnk_azi_der_d[k2+n_atom_pairs*(k-1+(np-1)*k_max)]; //cnk_azi_der_d[k-1+k_max*(np-1+k2*n_max)];
+              hipDoubleComplex tmp_1_cnk_pol_d=cnk_pol_der_d[k-1+k_max*(n-1 +k2*n_max)]; //cnk_pol_der_d[k2+n_atom_pairs*(k-1+(n-1)*k_max) ]; //trans_cnk_pol_der_d[k2+n_atom_pairs*(k-1+(n-1)*k_max) ]; //cnk_pol_der_d[k-1+k_max*(n-1 +k2*n_max)];
+              hipDoubleComplex tmp_2_cnk_pol_d=cnk_pol_der_d[k-1+k_max*(np-1+k2*n_max)]; //cnk_pol_der_d[k2+n_atom_pairs*(k-1+(np-1)*k_max)]; //trans_cnk_pol_der_d[k2+n_atom_pairs*(k-1+(np-1)*k_max)]; //cnk_pol_der_d[k-1+k_max*(np-1+k2*n_max)];
+              my_soap_rad_der+=multiplicity_array_d[counter2-1]*(tmp_1_cnk_rad_d.x*tmp_2_cnk_d.x+tmp_1_cnk_rad_d.y*tmp_2_cnk_d.y+
+                                                                 tmp_1_cnk_d.x*tmp_2_cnk_rad_d.x+tmp_1_cnk_d.y*tmp_2_cnk_rad_d.y);
+              my_soap_azi_der+=multiplicity_array_d[counter2-1]*(tmp_1_cnk_azi_d.x*tmp_2_cnk_d.x+tmp_1_cnk_azi_d.y*tmp_2_cnk_d.y+
+                                                                 tmp_1_cnk_d.x*tmp_2_cnk_azi_d.x+tmp_1_cnk_d.y*tmp_2_cnk_azi_d.y);
+              my_soap_pol_der+=multiplicity_array_d[counter2-1]*(tmp_1_cnk_pol_d.x*tmp_2_cnk_d.x+tmp_1_cnk_pol_d.y*tmp_2_cnk_d.y+
+                                                                 tmp_1_cnk_d.x*tmp_2_cnk_pol_d.x+tmp_1_cnk_d.y*tmp_2_cnk_pol_d.y);
+              // if(k2==0 && n==1 && np==1 && l==0 && m==0){
+              //     printf("cnk[%d][%d]: (%lf, %lf)\n", k, n, tmp_1_cnk_d.x, tmp_1_cnk_d.y);
+              //     printf("cnk_rad_der[%d][%d]: (%lf, %lf)\n", k, n, tmp_1_cnk_rad_d.x, tmp_1_cnk_rad_d.y);
+              //     printf("cnk_rad_der[%d][%d]: (%lf, %lf)\n", k, np, tmp_2_cnk_rad_d.x, tmp_2_cnk_rad_d.y);
+              //     printf("Product: %lf\n", my_soap_rad_der);
+              // }
+            } 
+          }
+          unc_soap_rad_der_d[counter-1+k2*n_soap_uncompressed]=my_soap_rad_der; //trans_soap_rad_der_d[k2+(counter-1)*n_atom_pairs]=my_soap_rad_der; //soap_rad_der_d[counter-1+k2*n_soap]=my_soap_rad_der;
+          unc_soap_azi_der_d[counter-1+k2*n_soap_uncompressed]=my_soap_azi_der; //trans_soap_azi_der_d[k2+(counter-1)*n_atom_pairs]=my_soap_azi_der; //soap_azi_der_d[counter-1+k2*n_soap]=my_soap_azi_der;
+          unc_soap_pol_der_d[counter-1+k2*n_soap_uncompressed]=my_soap_pol_der; //trans_soap_pol_der_d[k2+(counter-1)*n_atom_pairs]=my_soap_pol_der; //soap_pol_der_d[counter-1+k2*n_soap]=my_soap_pol_der;       
+        }
+      }
+    }
+    //   if(k2 == 9) {
+    // printf("GPU Final results for k2=9:\n");
+    // printf("counter=1: %lf\n", unc_soap_rad_der_d[0+9*n_soap_uncompressed]);
+    // printf("counter=2: %lf\n", unc_soap_rad_der_d[1+9*n_soap_uncompressed]);
+    // printf("counter=3: %lf\n", unc_soap_rad_der_d[2+9*n_soap_uncompressed]);}
+  }
+}
+
+
 extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *soap_cart_der_d, 
                                  double *soap_rad_der_d, double *soap_azi_der_d, double *soap_pol_der_d, 
                                  double *unc_soap_rad_der_d, double *unc_soap_azi_der_d, double *unc_soap_pol_der_d, 
@@ -376,8 +395,8 @@ extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *so
                                  double *multiplicity_array_d,
                                  hipDoubleComplex *cnk_d, 
                                  hipDoubleComplex *cnk_rad_der_d, hipDoubleComplex *cnk_azi_der_d, hipDoubleComplex *cnk_pol_der_d, 
-                                 int *n_neigh_d, int *i_k2_start_d, int *k2_i_site_d, int *k3_index_d, bool *skip_soap_component_d, 
-                                 bool compress_soap,
+                                 int *n_neigh_d, int *i_k2_start_d, int *k2_i_site_d, int *k3_index_d,
+                                 bool *skip_soap_component_flattened,bool compress_soap,
                                  int *compress_P_i, int *compress_P_j, double *compress_P_el,
                                  int n_sites, int n_atom_pairs, int n_soap, int comp_P_nz, int n_soap_uncompressed,
                                  int k_max, int n_max, int l_max, int maxneigh, hipStream_t *stream )
@@ -387,29 +406,15 @@ extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *so
 
   dim3 nblocks_get_soap_der_one=dim3((n_atom_pairs-1+tpb_get_soap_der_one)/tpb_get_soap_der_one,1,1);
   dim3 nthreads_get_soap_der_one=dim3(tpb_get_soap_der_one,1,1);
-
-  //size_t mf, ma;
-  //hipMemGetInfo(&mf, &ma);
-  //printf("\n free: %zu total: %zu", mf, ma);
-  /*
-  double *tdotoprod_der_rad,*tdotoprod_der_azi,*tdotoprod_der_pol; 
-  hipMallocAsync((void**)&tdotoprod_der_rad,sizeof(double)*n_atom_pairs*n_soap,stream[0]);
-  hipMallocAsync((void**)&tdotoprod_der_azi,sizeof(double)*n_atom_pairs*n_soap,stream[0]);
-  hipMallocAsync((void**)&tdotoprod_der_pol,sizeof(double)*n_atom_pairs*n_soap,stream[0]);
-  */
-  /*
-  double *trans_soap_rad_der_d, *trans_soap_azi_der_d, *trans_soap_pol_der_d;
-  hipMallocAsync((void **)&trans_soap_rad_der_d, sizeof(double)*n_atom_pairs*n_soap,stream[0]);
-  hipMallocAsync((void **)&trans_soap_azi_der_d, sizeof(double)*n_atom_pairs*n_soap,stream[0]);
-  hipMallocAsync((void **)&trans_soap_pol_der_d, sizeof(double)*n_atom_pairs*n_soap,stream[0]);
-  */
-  /*                                          
-  cuda_get_soap_der_one<<< nblocks_get_soap_der_one, nthreads_get_soap_der_one,0, stream[0]>>>(soap_rad_der_d,soap_azi_der_d, soap_pol_der_d, multiplicity_array_d, 
-                                               trans_soap_rad_der_d, trans_soap_azi_der_d, trans_soap_pol_der_d, 
+  // printf("\n \n \n n_soap_uncompressed %d \n\n", n_soap_uncompressed);
+  // exit(0);                                        
+  cuda_get_soap_der_one<<< nblocks_get_soap_der_one, nthreads_get_soap_der_one,0, stream[0]>>>(multiplicity_array_d, 
+                                               unc_soap_rad_der_d, unc_soap_azi_der_d, unc_soap_pol_der_d,   
                                                cnk_d, cnk_rad_der_d, cnk_azi_der_d, cnk_pol_der_d,
-                                               k2_i_site_d, skip_soap_component_d, 
-                                               n_sites,  n_atom_pairs, n_soap,  k_max, n_max, l_max);
-  */                                        
+                                               k2_i_site_d, skip_soap_component_flattened,
+                                               n_sites,  n_atom_pairs, n_soap, 
+                                               n_soap_uncompressed, k_max, n_max, l_max);
+                                 
   
   /*naive_transpose_soap_rad_azi_pol<<< (n_soap*n_atom_pairs+tpb-1)/tpb, tpb,0, stream[0]>>>(trans_soap_rad_der_d,
                                             soap_rad_der_d, 
@@ -423,12 +428,12 @@ extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *so
                                             soap_pol_der_d, 
                                             n_atom_pairs,n_soap);          */                           
   //gpuErrchk( hipDeviceSynchronize() );
-  cuda_get_soap_der_two_one_compress<<<nblocks_get_soap_der_one, nthreads,0, stream[0]>>>(soap_rad_der_d,soap_azi_der_d, soap_pol_der_d,
+  cuda_get_soap_der_two_one_compress<<<nblocks_get_soap_der_one, nthreads_get_soap_der_one,0, stream[0]>>>(soap_rad_der_d,soap_azi_der_d, soap_pol_der_d,
                                                unc_soap_rad_der_d, unc_soap_azi_der_d, unc_soap_pol_der_d,                                            
                                                compress_P_i, compress_P_j, compress_P_el,
                                                compress_soap,
-                                               n_sites,  n_atom_pairs, n_soap, comp_P_nz,n_soap_uncompressed,
-                                               k_max, n_max, l_max);
+                                               n_sites,  n_atom_pairs, 
+                                               n_soap, comp_P_nz,n_soap_uncompressed,k_max, n_max, l_max);
   
   cuda_get_soap_der_two_one<<<n_atom_pairs, nthreads,0, stream[0]>>>(soap_d,sqrt_dot_d, 
                                                soap_rad_der_d,soap_azi_der_d, soap_pol_der_d,  
@@ -454,10 +459,6 @@ extern "C" void gpu_get_soap_der(double *soap_d, double *sqrt_dot_d, double3 *so
                                                          thetas_d, phis_d, rjs_d,
                                                          n_neigh_d, i_k2_start_d, k2_i_site_d, k3_index_d, 
                                                          n_sites,  n_atom_pairs, n_soap,  k_max, n_max, l_max, maxneigh); 
-  
-  
-  //hipFreeAsync(tdotoprod_der_rad,   stream[0]);hipFreeAsync(tdotoprod_der_azi,   stream[0]);hipFreeAsync(tdotoprod_der_pol,   stream[0]);
-  //hipFreeAsync(trans_soap_rad_der_d,stream[0]);hipFreeAsync(trans_soap_azi_der_d,stream[0]);hipFreeAsync(trans_soap_pol_der_d,stream[0]); 
   
   return;
 }
