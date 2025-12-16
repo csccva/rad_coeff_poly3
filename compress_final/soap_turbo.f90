@@ -112,9 +112,12 @@ module soap_turbo_desc
   integer(c_size_t) :: st_size_k3_index
   type(c_ptr) :: gdorpro_azi_d, gdorpro_rad_d, gdorpro_pol_d
   type(c_ptr) :: transp_azi_d, transp_rad_d, transp_pol_d
+  real(c_double), allocatable,target :: g_this_soap(:,:)
   real(c_double), allocatable,target :: g_this_soap_rad_der(:,:), g_this_soap_azi_der(:,:), g_this_soap_pol_der(:,:)
   integer(c_size_t) :: st_size_g_this_soap_rad_der, st_size_g_this_soap_azi_der, st_size_g_this_soap_pol_der
   type(c_ptr) :: g_this_soap_rad_der_d, g_this_soap_azi_der_d, g_this_soap_pol_der_d
+  integer(c_size_t) :: st_size_g_this_soap
+  type(c_ptr) :: g_this_soap_d
   logical(c_bool) :: c_compress_soap
   integer(c_size_t) :: st_size_comp_i,st_size_comp_j,st_size_comp_el
   type(c_ptr) :: compress_P_i_d,compress_P_j_d,compress_P_el_d, skip_soap_component_flattened_d
@@ -513,6 +516,8 @@ module soap_turbo_desc
 
 
   allocate( this_soap(1:n_soap_uncompressed) )
+  allocate( g_this_soap(1:n_soap_uncompressed,1:n_sites) )
+  g_this_soap=0.0
   do i = 1, n_sites
     this_soap = 0.d0
     counter = 0
@@ -533,7 +538,8 @@ module soap_turbo_desc
 !              multiplicity = multiplicity * 2.d0
 !            end if
             multiplicity = multiplicity_array(counter2)
-            this_soap(counter) = this_soap(counter) + multiplicity * real(cnk(k, n, i) * conjg(cnk(k, np, i)))
+            !this_soap(counter) = this_soap(counter) + multiplicity * real(cnk(k, n, i) * conjg(cnk(k, np, i)))
+            g_this_soap(counter,i) = g_this_soap(counter,i) + multiplicity * real(cnk(k, n, i) * conjg(cnk(k, np, i)))
           end do
         end do
       end do
@@ -542,19 +548,23 @@ module soap_turbo_desc
 !   for large dimensions and BLAS routines if P is dense)
     if( compress_soap )then
       do k = 1, compress_P_nonzero
-        soap(compress_P_i(k), i) = soap(compress_P_i(k), i) + compress_P_el(k) * this_soap(compress_P_j(k))
+        ! soap(compress_P_i(k), i) = soap(compress_P_i(k), i) + compress_P_el(k) * this_soap(compress_P_j(k))
+        soap(compress_P_i(k), i) = soap(compress_P_i(k), i) + compress_P_el(k) * g_this_soap(compress_P_j(k),i)
       end do
     else
-      soap(:,i) = this_soap(:)
-    end if
-    sqrt_dot_p(i) = dsqrt(dot_product(soap(1:n_soap, i), soap(1:n_soap, i)))
-!   This is to avoid NaNs when the SOAP sphere is empty
-    if( sqrt_dot_p(i) < 1.d-5 )then
-      sqrt_dot_p(i) = 1.d0
+      ! soap(:,i) = this_soap(:)
+      soap(:,i) = g_this_soap(:,i)
     end if
   end do
   deallocate( this_soap )
   
+  
+  c_compress_soap = compress_soap
+
+  st_size_g_this_soap=sizeof(g_this_soap) 
+  call gpu_malloc_all(g_this_soap_d,st_size_g_this_soap,gpu_stream)
+  call cpy_htod(c_loc(g_this_soap),g_this_soap_d,st_size_g_this_soap,gpu_stream)
+
 
   st_multiplicity_array=sizeof(multiplicity_array)
   call gpu_malloc_all(multiplicity_array_d, st_multiplicity_array,gpu_stream)
@@ -586,7 +596,21 @@ module soap_turbo_desc
   call cpy_htod(c_loc(soap),soap_d,st_soap_d,gpu_stream)
 
   call gpu_malloc_all(sqrt_dot_p_d, st_sqrt_dot_p,gpu_stream)
-  call cpy_htod(c_loc(sqrt_dot_p),sqrt_dot_p_d,st_sqrt_dot_p,gpu_stream)
+  !call cpy_htod(c_loc(sqrt_dot_p),sqrt_dot_p_d,st_sqrt_dot_p,gpu_stream)
+  
+  call gpu_memset_async(sqrt_dot_p_d,valuetoset,st_sqrt_dot_p,gpu_stream)
+  call gpu_memset_async(soap_d,valuetoset,st_soap_d,gpu_stream)
+
+  st_size_cnk=sizeof(cnk)
+  call gpu_malloc_all(cnk_d,st_size_cnk,gpu_stream)
+  call cpy_htod(c_loc(cnk),cnk_d,st_size_cnk,gpu_stream)
+  
+  call gpu_get_sqrt_dot_p(sqrt_dot_p_d, soap_d, g_this_soap_d,  multiplicity_array_d, &
+                                    cnk_d, skip_soap_component_flattened_d,c_compress_soap,  &
+                                    compress_P_i_d, compress_P_j_d, compress_P_el_d, &
+                                    n_sites, n_soap,  comp_P_nz, n_soap_uncompressed, &
+                                    n_max,l_max, gpu_stream)
+
 
   if( do_derivatives )then
 !   Derivatives of the SOAP descriptor in spherical coordinates
@@ -605,66 +629,20 @@ module soap_turbo_desc
     g_this_soap_rad_der=0.0
     g_this_soap_azi_der=0.0
     g_this_soap_pol_der=0.0
-    ! k2 = 0
-    ! do i = 1, n_sites
-    !   do j = 1, n_neigh(i)
-    !     this_soap_rad_der = 0.d0
-    !     this_soap_azi_der = 0.d0
-    !     this_soap_pol_der = 0.d0
-    !     k2 = k2 + 1
-    !     counter = 0
-    !     counter2 = 0
-    !     do n = 1, n_max
-    !       do np = n, n_max
-    !         do l = 0, l_max
-    !           counter = counter+1
-    !           if( skip_soap_component_flattened(counter) )cycle
-    !           do m = 0, l
-    !             k = 1 + l*(l+1)/2 + m
-    !             counter2 = counter2 + 1
-    !             multiplicity = multiplicity_array(counter2)
-    !             g_this_soap_rad_der(counter, k2) = g_this_soap_rad_der(counter, k2) + &
-    !                                         multiplicity * real( cnk_rad_der(k, n, k2) * &
-    !                                         conjg(cnk(k, np, i)) + cnk(k, n, i) * conjg(cnk_rad_der(k, np, k2)) )
-    !             g_this_soap_azi_der(counter, k2) = g_this_soap_azi_der(counter, k2) + &
-    !                                         multiplicity * real( cnk_azi_der(k, n, k2) * &
-    !                                         conjg(cnk(k, np, i)) + cnk(k, n, i) * conjg(cnk_azi_der(k, np, k2)) )
-    !             g_this_soap_pol_der(counter, k2) =  g_this_soap_pol_der(counter, k2) + &
-    !                                         multiplicity * real( cnk_pol_der(k, n, k2) * &
-    !                                         conjg(cnk(k, np, i)) + cnk(k, n, i) * conjg(cnk_pol_der(k, np, k2)) )
-    !             ! this_soap_rad_der(counter) = this_soap_rad_der(counter) + multiplicity * real( cnk_rad_der(k, n, k2) * &
-    !             !                             conjg(cnk(k, np, i)) + cnk(k, n, i) * conjg(cnk_rad_der(k, np, k2)) )
-    !             ! this_soap_azi_der(counter) = this_soap_azi_der(counter) + multiplicity * real( cnk_azi_der(k, n, k2) * &
-    !             !                             conjg(cnk(k, np, i)) + cnk(k, n, i) * conjg(cnk_azi_der(k, np, k2)) )
-    !             ! this_soap_pol_der(counter) = this_soap_pol_der(counter) + multiplicity * real( cnk_pol_der(k, n, k2) * &
-    !             !                             conjg(cnk(k, np, i)) + cnk(k, n, i) * conjg(cnk_pol_der(k, np, k2)) )
-    !           end do
 
-    !         end do
-    !       end do
-    !     end do
-    !   end do
-    ! end do
-    
-
-
-    st_size_cnk=sizeof(cnk)
     st_size_cnk_azi_der=sizeof(cnk_azi_der)
     st_size_cnk_rad_der=sizeof(cnk_rad_der)
     st_size_cnk_pol_der=sizeof(cnk_pol_der)
     
 
-    call gpu_malloc_all(cnk_d,st_size_cnk,gpu_stream)
     call gpu_malloc_all(cnk_azi_der_d,st_size_cnk_azi_der,gpu_stream)
     call gpu_malloc_all(cnk_rad_der_d,st_size_cnk_rad_der,gpu_stream)
     call gpu_malloc_all(cnk_pol_der_d,st_size_cnk_pol_der,gpu_stream)   
 
-    call cpy_htod(c_loc(cnk),cnk_d,st_size_cnk,gpu_stream)
     call cpy_htod(c_loc(cnk_azi_der), cnk_azi_der_d,st_size_cnk_azi_der,gpu_stream)
     call cpy_htod(c_loc(cnk_rad_der), cnk_rad_der_d,st_size_cnk_rad_der,gpu_stream)
     call cpy_htod(c_loc(cnk_pol_der), cnk_pol_der_d,st_size_cnk_pol_der,gpu_stream)
 
-    c_compress_soap = compress_soap
     st_size_g_this_soap_rad_der=sizeof(g_this_soap_rad_der)
     st_size_g_this_soap_azi_der=sizeof(g_this_soap_azi_der)
     st_size_g_this_soap_pol_der=sizeof(g_this_soap_pol_der)
@@ -760,9 +738,9 @@ module soap_turbo_desc
     call gpu_malloc_all(soap_cart_der_d,st_size_soap_cart_der,gpu_stream)
 !    call cpy_htod(c_loc(soap_cart_der),soap_cart_der_d,st_size_soap_cart_der,gpu_stream)
 
-  call gpu_memset_async(soap_azi_der_d,valuetoset,st_size_soap_azi_der,gpu_stream)
-  call gpu_memset_async(soap_rad_der_d,valuetoset,st_size_soap_rad_der,gpu_stream)
-  call gpu_memset_async(soap_pol_der_d,valuetoset,st_size_soap_pol_der,gpu_stream)
+  ! call gpu_memset_async(soap_azi_der_d,valuetoset,st_size_soap_azi_der,gpu_stream)
+  ! call gpu_memset_async(soap_rad_der_d,valuetoset,st_size_soap_rad_der,gpu_stream)
+  ! call gpu_memset_async(soap_pol_der_d,valuetoset,st_size_soap_pol_der,gpu_stream)
 
   ! call gpu_memset_async(g_this_soap_azi_der_d,valuetoset,st_size_soap_azi_der,gpu_stream)
   ! call gpu_memset_async(g_this_soap_rad_der_d,valuetoset,st_size_soap_rad_der,gpu_stream)

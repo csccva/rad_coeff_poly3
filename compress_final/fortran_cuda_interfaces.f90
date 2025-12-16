@@ -123,5 +123,21 @@ MODULE F_B_C
         logical(c_bool), value :: c_compress_soap
       end subroutine
 
+      subroutine gpu_get_sqrt_dot_p(sqrt_dot_p_d, soap_d, g_this_soap_d,  multiplicity_array_d, &
+                                    cnk_d, skip_soap_component_flattened_d,c_compress_soap,  &
+                                    compress_P_i, compress_P_j, compress_P_el, &
+                                    n_sites, n_soap,  comp_P_nz, n_soap_uncompressed, &
+                                    n_max,l_max, gpu_stream) &
+                  bind(C,name="gpu_get_sqrt_dot_p")
+        use iso_c_binding
+        type(c_ptr), value :: g_this_soap_d, cnk_d, skip_soap_component_flattened_d
+        type(c_ptr), value :: compress_P_i, compress_P_j, compress_P_el
+        type(c_ptr) :: gpu_stream
+        type(c_ptr), value :: sqrt_dot_p_d, soap_d, multiplicity_array_d
+        integer(c_int),value :: n_sites, n_soap, n_max,l_max
+        integer(c_int),value :: comp_P_nz, n_soap_uncompressed
+        logical(c_bool), value :: c_compress_soap
+      end subroutine
+
     END INTERFACE
   END MODULE F_B_C
