@@ -593,7 +593,7 @@ module soap_turbo_desc
   st_sqrt_dot_p=sizeof(sqrt_dot_p)
 
   call gpu_malloc_all(soap_d,st_soap_d,gpu_stream)
-  call cpy_htod(c_loc(soap),soap_d,st_soap_d,gpu_stream)
+  !call cpy_htod(c_loc(soap),soap_d,st_soap_d,gpu_stream)
 
   call gpu_malloc_all(sqrt_dot_p_d, st_sqrt_dot_p,gpu_stream)
   !call cpy_htod(c_loc(sqrt_dot_p),sqrt_dot_p_d,st_sqrt_dot_p,gpu_stream)
