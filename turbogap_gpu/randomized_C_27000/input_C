@@ -5,7 +5,11 @@ n_species = 1
 species = C 
 masses = 12.01 
 e0 = -.16138053 
+max_gbytes_per_process = 1
 
+md_nsteps = 10
+t_beg = 300.0
 
-vdw_type = "ts"
-vdw_rcut = 15.0
+core_pot_cutoff = 15.0001
+# core_pot_buffer = 2.
+
