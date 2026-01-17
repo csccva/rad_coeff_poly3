@@ -237,113 +237,113 @@ contains
          soap_cart_der = 0.d0
       end if
 
-      write(*,*)
-      write(*,*)
-      write(*,*)
-      write(*,*)
-      write(*,*)
-      write(*,*) "n_sites ", n_sites
-      write(*,*) "n_neigh ", size(n_neigh,1)
+      !write(*,*)
+      !write(*,*)
+      !write(*,*)
+      !write(*,*)
+      !write(*,*)
+      !write(*,*) "n_sites ", n_sites
+      !write(*,*) "n_neigh ", size(n_neigh,1)
 
-      open(unit=7, file="n_neigh.input", status="unknown" )
-      do i=1,size(n_neigh,1)
-         write(7,'(I0, 1X)') n_neigh(i)
-      end do
-      close(7)
+      !open(unit=7, file="n_neigh.input", status="unknown" )
+      !do i=1,size(n_neigh,1)
+      !   write(7,'(I0, 1X)') n_neigh(i)
+      !end do
+      !close(7)
 
-      write(*,*) "n_species ", n_species
-      write(*,*) "max_species_multiplicity", max_species_multiplicity
-      write(*,*)
-      write(*,*) "species", size(species,1), size(species,2)
-      open(unit=8,file="species.input", status="unknown")
-      do j=1,size(species,2)
-         do i=1,size(species,1)
-            write(8,'(I0, 1X)') species(i,j)
-         end do
-      end do
-      close(8)
+      !write(*,*) "n_species ", n_species
+      !write(*,*) "max_species_multiplicity", max_species_multiplicity
+      !write(*,*)
+      !write(*,*) "species", size(species,1), size(species,2)
+      !open(unit=8,file="species.input", status="unknown")
+      !do j=1,size(species,2)
+      !   do i=1,size(species,1)
+      !      write(8,'(I0, 1X)') species(i,j)
+      !   end do
+      !end do
+      !close(8)
 
-      open(unit=9, file="species_multiplicity.input", status="unknown" )
-      do i=1,size(species_multiplicity,1)
-         write(9,'(I0, 1X)') species_multiplicity(i)
-      end do
-      close(9)
+      !open(unit=9, file="species_multiplicity.input", status="unknown" )
+      !do i=1,size(species_multiplicity,1)
+      !   write(9,'(I0, 1X)') species_multiplicity(i)
+      !end do
+      !close(9)
 
-      write(*,*) "n_atom_pairs", n_atom_pairs
+      !write(*,*) "n_atom_pairs", n_atom_pairs
 
-      write(*,*) "mask", size(mask,1), size(mask,2)
-      open(unit=11,file="mask.input", status="unknown")
-      do j=1,size(mask,2)
-         do i=1,size(mask,1)
-            write(11,'(L10)') mask(i,j)
-         enddo
-      enddo
-      close(11)
+      !write(*,*) "mask", size(mask,1), size(mask,2)
+      !open(unit=11,file="mask.input", status="unknown")
+      !do j=1,size(mask,2)
+      !   do i=1,size(mask,1)
+      !      write(11,'(L10)') mask(i,j)
+      !   enddo
+      !enddo
+      !close(11)
       
-      open(unit=10,file="rjs.input", status="unknown")
-      open(unit=11,file="thetas.input", status="unknown")
-      open(unit=12,file="phis.input", status="unknown")
-      do i=1,size(rjs,1)
-         write(10, *) rjs(i)
-         write(11, *) thetas(i)
-         write(12, *) phis(i)
-      enddo
-      close(12)
-      close(10)
-      close(11)
-      write(*,*) "alpha_max", alpha_max
-      write(*,*) "l_max", l_max
-      write(*,*) "rcut_hard", rcut_hard, size(rcut_hard,1)
-      write(*,*) "rcut_soft", rcut_soft, size(rcut_soft,1)
-      write(*,*) "nf" , nf, size(nf,1)
-      write(*,*) "global_scaling", global_scaling, size(global_scaling,1)
-      write(*,*) "atom_sigma_r", atom_sigma_r, size(atom_sigma_r,1)
-      write(*,*) "atom_sigma_r_scaling",  atom_sigma_r_scaling, size( atom_sigma_r_scaling,1)
-      write(*,*) "atom_sigma_t", atom_sigma_t, size(atom_sigma_t,1)
-      write(*,*) "atom_sigma_t_scaling", atom_sigma_t_scaling, size(atom_sigma_t_scaling,1)
-      write(*,*) "amplitude_scaling", amplitude_scaling, size(amplitude_scaling,1)
-      write(*,*) "radial_enhancement", radial_enhancement
-      write(*,*) "central_weight", central_weight, size(central_weight,1)
-      write(*,*) "basis ", basis
-      write(*,*) "scaling_mode ", scaling_mode
-      write(*,*) "do_timing ", do_timing
-      write(*,*) "do_derivatives ", do_derivatives
-      write(*,*) "compress_soap ", compress_soap
+      !open(unit=10,file="rjs.input", status="unknown")
+      !open(unit=11,file="thetas.input", status="unknown")
+      !open(unit=12,file="phis.input", status="unknown")
+      !do i=1,size(rjs,1)
+      !   write(10, *) rjs(i)
+      !   write(11, *) thetas(i)
+      !   write(12, *) phis(i)
+      !enddo
+      !close(12)
+      !close(10)
+      !close(11)
+      !write(*,*) "alpha_max", alpha_max
+      !write(*,*) "l_max", l_max
+      !write(*,*) "rcut_hard", rcut_hard, size(rcut_hard,1)
+      !write(*,*) "rcut_soft", rcut_soft, size(rcut_soft,1)
+      !write(*,*) "nf" , nf, size(nf,1)
+      !write(*,*) "global_scaling", global_scaling, size(global_scaling,1)
+      !write(*,*) "atom_sigma_r", atom_sigma_r, size(atom_sigma_r,1)
+      !write(*,*) "atom_sigma_r_scaling",  atom_sigma_r_scaling, size( atom_sigma_r_scaling,1)
+      !write(*,*) "atom_sigma_t", atom_sigma_t, size(atom_sigma_t,1)
+      !write(*,*) "atom_sigma_t_scaling", atom_sigma_t_scaling, size(atom_sigma_t_scaling,1)
+      !write(*,*) "amplitude_scaling", amplitude_scaling, size(amplitude_scaling,1)
+      !write(*,*) "radial_enhancement", radial_enhancement
+      !write(*,*) "central_weight", central_weight, size(central_weight,1)
+      !write(*,*) "basis ", basis
+      !write(*,*) "scaling_mode ", scaling_mode
+      !write(*,*) "do_timing ", do_timing
+      !write(*,*) "do_derivatives ", do_derivatives
+      !write(*,*) "compress_soap ", compress_soap
 
-      write(*,*) "compress_P_nonzero", compress_P_nonzero
+      !write(*,*) "compress_P_nonzero", compress_P_nonzero
 
-      write(*,*) "compress_P_i", size(compress_P_i,1)
+      !write(*,*) "compress_P_i", size(compress_P_i,1)
 
-      open(unit=19,file="compress_P_i.input", status="unknown")
-      do i=1,size(compress_P_i,1)
-         write(19,'(I0, 1X)') compress_P_i(i)
-      enddo
-      close(19)
-
-
-      write(*,*) "compress_P_j", size(compress_P_j,1)
-
-      open(unit=19,file="compress_P_j.input", status="unknown")
-      do i=1,size(compress_P_j,1)
-         write(19,'(I0, 1X)') compress_P_j(i)
-      enddo
-      close(19)
+      !open(unit=19,file="compress_P_i.input", status="unknown")
+      !do i=1,size(compress_P_i,1)
+      !   write(19,'(I0, 1X)') compress_P_i(i)
+      !enddo
+      !close(19)
 
 
+      !write(*,*) "compress_P_j", size(compress_P_j,1)
 
-      write(*,*) "compress_P_el", size(compress_P_el,1)
+      !open(unit=19,file="compress_P_j.input", status="unknown")
+      !do i=1,size(compress_P_j,1)
+      !   write(19,'(I0, 1X)') compress_P_j(i)
+      !enddo
+      !close(19)
 
-      open(unit=19,file="compress_P_el.input", status="unknown")
-      do i=1,size(compress_P_el,1)
-         write(19,*) compress_P_el(i)
-      enddo
-      close(19)
 
-      write(*,*) "n_soap", n_soap
+
+      !write(*,*) "compress_P_el", size(compress_P_el,1)
+
+      !open(unit=19,file="compress_P_el.input", status="unknown")
+      !do i=1,size(compress_P_el,1)
+      !   write(19,*) compress_P_el(i)
+      !enddo
+      !close(19)
+
+      !write(*,*) "n_soap", n_soap
 
       ! stop
 
-      open(unit=5,file="soap.output",status="unknown")
+      ! open(unit=5,file="soap.output",status="unknown")
       ! do i=1,n_soap
       !    write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
       ! enddo
@@ -365,13 +365,13 @@ contains
       !    enddo
       ! enddo
       
-      do i=1,n_soap
-         write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
-      enddo
+      ! do i=1,n_soap
+      !    write(5, *) soap(i, 67), soap_cart_der(1, i, 71),soap_cart_der(2, i, 71),soap_cart_der(3, i, 71)
+      ! enddo
          
-      close(5)
+      ! close(5)
 
-      stop
+      !stop
 
      
       !###########################################!

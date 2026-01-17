@@ -1263,7 +1263,6 @@ program turbogap
 
 
 
-
      !**************************************************************************
      !   If we are doing prediction, we run this chunk of code
      if( params%do_prediction .or. params%write_soap .or. params%write_derivatives)then
@@ -1789,7 +1788,89 @@ program turbogap
                  !                 v_neigh_vdw(k) = hirshfeld_v(j2)
                  v_neigh_vdw(k) = local_properties(j2, vdw_lp_index)
               end do
-           end do
+           end do 
+           
+           write(*,*) 
+           write(*,*) "n_sites = ", n_sites, "n_atom_pairs = ", n_atom_pairs 
+           write(*,*) "i_beg = ", i_beg, "i_end = ", i_end
+           write(*,*) "j_beg = ", j_beg, "j_end = ", j_end
+           write(*,*) "vdw_rcut = ", params%vdw_rcut
+           write(*,*) "vdw_buffer= ", params%vdw_buffer    
+           write(*,*) "vdw_rcut_inner = ", params%vdw_rcut_inner
+           write(*,*) "vdw_buffer_inner = ", params%vdw_buffer_inner
+           write(*,*)  "vdw_sr = ", params%vdw_sr
+           write(*,*)  "vdw_d = ", params%vdw_d
+           write(*,*)  "do_forces = ", params%do_forces
+           write(*,*)  "n_vdw_c6_ref = ", size(params%vdw_c6_ref,1)
+           write(*,*)  "n_vdw_r0_ref = ", size(params%vdw_r0_ref,1)
+           write(*,*)  "n_vdw_r0_ref = ", size(params%vdw_r0_ref,1)
+
+
+           write(*,*)  "vdw_c6_ref(1) = ", params%vdw_c6_ref(1)
+           write(*,*)  "vdw_r0_ref(1) = ", params%vdw_r0_ref(1)
+           write(*,*)  "vdw_r0_ref(1) = ", params%vdw_r0_ref(1)
+           
+           open(unit=11, file="local_properties.input", status="unknown")
+           do i=i_beg,i_end
+             write(11,*) i, local_properties(i,vdw_lp_index)
+           enddo
+           close(11)
+
+           open(unit=13, file="local_properties_cart_der.input", status="unknown")
+           do j=j_beg,j_end
+               write(13,*) j, local_properties_cart_der(1,j,vdw_lp_index), &
+                              local_properties_cart_der(2,j,vdw_lp_index), &
+                              local_properties_cart_der(3,j,vdw_lp_index)
+           enddo
+           close(13)
+
+           write(*,*) "n_n_neigh = ", size(n_neigh,1)
+           write(*,*) "n_n_neighbors_list = ", size(neighbors_list,1)
+           write(*,*) "n_neighbor_species = ", size(neighbor_species,1)
+
+           open(unit=17,file="n_neigh.input",status="unknown")
+           do i=i_beg,i_end
+             write(17,*) i, n_neigh(i)
+           enddo 
+           close(17)
+
+           open(unit=19,file="neighbors_list.input",status="unknown")
+           open(unit=23,file="neighbor_species.input",status="unknown")
+           do j=j_beg,j_end
+               write(19,*) j,  neighbors_list(j)
+               write(23,*) j,  neighbor_species(j)
+           enddo
+           close(19)
+           close(23)
+
+           write(*,*) "n_v_neigh_vdw = ", size(v_neigh_vdw,1)
+
+           open(unit=29,file="v_neigh_vdw.input",status="unknown")
+           do j=1,size(v_neigh_vdw,1)
+            write(29,*) j,v_neigh_vdw(j)
+           enddo
+           close(29)
+
+           write(*,*) "n_rjs = ", size(rjs,1)
+
+           open(unit=31,file="rjs.input",status="unknown")
+           do j=1,size(rjs,1)
+            write(31,*) j,rjs(j)
+           enddo
+           close(31)
+
+
+           write(*,*) "n_xyz = ", size(xyz,2)
+
+           open(unit=37,file="xyz.input",status="unknown")
+           do j=1,size(xyz,2)
+            write(37,*) j,xyz(1,j),xyz(2,j),xyz(3,j)
+           enddo
+           close(37)
+
+           write(*,*) "n_energies = ", size(this_energies,1)
+           write(*,*) "n_forces = ", size(this_forces,2)
+           stop
 
            call get_ts_energy_and_forces( local_properties(i_beg:i_end, vdw_lp_index), &
                 & local_properties_cart_der(1:3, j_beg:j_end, vdw_lp_index), &
