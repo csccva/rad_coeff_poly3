@@ -1803,12 +1803,12 @@ program turbogap
            write(*,*)  "do_forces = ", params%do_forces
            write(*,*)  "n_vdw_c6_ref = ", size(params%vdw_c6_ref,1)
            write(*,*)  "n_vdw_r0_ref = ", size(params%vdw_r0_ref,1)
-           write(*,*)  "n_vdw_r0_ref = ", size(params%vdw_r0_ref,1)
+           write(*,*)  "n_vdw__alpha0_ref = ", size(params%vdw_alpha0_ref,1)
 
 
            write(*,*)  "vdw_c6_ref(1) = ", params%vdw_c6_ref(1)
            write(*,*)  "vdw_r0_ref(1) = ", params%vdw_r0_ref(1)
-           write(*,*)  "vdw_r0_ref(1) = ", params%vdw_r0_ref(1)
+           write(*,*)  "vdw_alpha0_ref(1) = ", params%vdw_alpha0_ref(1)
            
            open(unit=11, file="local_properties.input", status="unknown")
            do i=i_beg,i_end
@@ -1870,7 +1870,6 @@ program turbogap
 
            write(*,*) "n_energies = ", size(this_energies,1)
            write(*,*) "n_forces = ", size(this_forces,2)
-           stop
 
            call get_ts_energy_and_forces( local_properties(i_beg:i_end, vdw_lp_index), &
                 & local_properties_cart_der(1:3, j_beg:j_end, vdw_lp_index), &
@@ -1892,7 +1891,28 @@ program turbogap
            deallocate(v_neigh_vdw)
         end if
 
+        open(unit=41, file="energies.input", status="unknown")
+        do i=1,size(this_energies_vdw,1)
+         write(41,*) i, this_energies_vdw(i)
+        enddo
+        close(41)
+        
+        write(*,*) sum(this_energies_vdw)
+        
+        open(unit=43,file="forces.input", status="unknown")
+        do j=1,size(this_forces_vdw,2)
+         write(43,*) j, this_forces_vdw(1,j),this_forces_vdw(2,j), this_forces_vdw(3,j) 
+        enddo
+        close(43)
 
+        open(unit=47,file="virial.input", status="unknown")
+        write(47,*) this_virial_vdw(1,1),this_virial_vdw(1,2),this_virial_vdw(1,3)
+        write(47,*) this_virial_vdw(2,1),this_virial_vdw(2,2),this_virial_vdw(2,3)
+        write(47,*) this_virial_vdw(3,1),this_virial_vdw(3,2),this_virial_vdw(3,3)
+
+
+        stop
+        
         !----------------------------------------------------!
         !--- EXPERIMENTAL SPECTRUM CALCULATION AND FORCES ---!
         !----------------------------------------------------!
