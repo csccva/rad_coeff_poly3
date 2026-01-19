@@ -4,22 +4,22 @@ program turbotest
   implicit none
   
   integer :: n_sites, n_atom_pairs, i_beg, i_end, j_beg, j_end
-  real*8, allocatable :: local_properties:(:,:), local_properties_cart_der(:,:,:)
-  integer :: n_neigh(:), neighbors_list(:), neighbor_species(:)
-  real*8 ::vdw_rcut, vdw_buffer, vdw_rcut_inner, vdw_buffer_inner,  sR, d,
+  real*8, allocatable :: local_properties(:,:), local_properties_cart_der(:,:,:)
+  integer, allocatable :: n_neigh(:), neighbors_list(:), neighbor_species(:)
+  real*8 ::vdw_rcut, vdw_buffer, vdw_rcut_inner, vdw_buffer_inner,  vdw_sr, vdw_d
   real*8, allocatable :: rjs(:), xyz(:,:), v_neigh_vdw(:)
   real*8, allocatable :: vdw_c6_ref(:), vdw_r0_ref(:), vdw_alpha0_ref(:)
   logical :: do_forces
   real*8 :: this_virial(1:3, 1:3)
   real*8, allocatable :: this_energies(:), this_forces(:,:)
-  integer :: n_vdw_c6_ref, n_vdw_r0_ref, n_vdw_r0_ref
-  integer :: n_n_neigh, n_n_neighbors_list, n_neighbor_species
+  integer :: n_vdw_c6_ref, n_vdw_r0_ref, n_vdw_alpha0_ref
+  integer, allocatable :: n_n_neigh, n_n_neighbors_list, n_neighbor_species
   integer :: n_v_neigh_vdw, n_rjs, n_xyz, n_energies, n_forces
   integer :: itmp, jtmp
   real*8 :: lptmp, lpocdtmpx,lpcdtmpy,lpcdtmpz
 
 
-!  subroutine get_ts_energy_and_forces( hirshfeld_v, hirshfeld_v_cart_der, &
+! get_ts_energy_and_forces( hirshfeld_v, hirshfeld_v_cart_der, &
 !                                        n_neigh, neighbors_list, neighbor_species, &
 !                                        rcut, buffer, rcut_inner, buffer_inner, rjs, xyz, hirshfeld_v_neigh, &
 !                                        sR, d, c6_ref, r0_ref, alpha0_ref, do_forces, &
@@ -39,7 +39,7 @@ program turbotest
   vdw_d =    20.000000000000000  
   n_vdw_c6_ref =            1
   n_vdw_r0_ref =            1 
-  n_vdw_r0_ref =            1
+  n_vdw_alpha0_ref =            1
 
   allocate(vdw_c6_ref(1:n_vdw_c6_ref))
   allocate(vdw_r0_ref(1:n_vdw_r0_ref))
@@ -67,12 +67,12 @@ program turbotest
 
 
   n_energies =     n_sites
-  n_forces =    n_sitees
-  allocate(this_energies(1:n_rjs) )
+  n_forces =    n_sites
+  allocate(this_energies(1:n_energies) )
   allocate(this_forces(1:3,1:n_forces) )
   
   allocate(local_properties(i_beg:i_end,1))
-  allocate(local_properties(1:3, j_beg:j_end,1))
+  allocate(local_properties_cart_der(1:3, j_beg:j_end,1))
   
 !   call get_ts_energy_and_forces( local_properties(i_beg:i_end, vdw_lp_index), &
 !                 & local_properties_cart_der(1:3, j_beg:j_end, vdw_lp_index), &
