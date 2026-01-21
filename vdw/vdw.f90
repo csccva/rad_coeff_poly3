@@ -257,7 +257,10 @@ module vdw
                              exp_damp(k) * d / sR / r0_ij(k)**2
           end if
         end do
+      enddo
 !       Make sure no NaNs arise for zero Hirshfeld volumes
+        
+      do i = 1, n_sites
         if( hirshfeld_v(i) == 0.d0 )then
           pref_force1(i) = 0.d0
           pref_force2(i) = 0.d0
@@ -336,45 +339,6 @@ module vdw
       call cpy_htod(c_loc(i2_index),i2_index_d, st_n_pairs, gpu_stream)
       call gpu_malloc_all(i_site_index_d, st_n_pairs, gpu_stream)
       call cpy_htod(c_loc(i_site_index),i_site_index_d, st_n_pairs, gpu_stream)
-
-      ! k = 0
-      ! do i = 1, n_sites
-      !   i2 = modulo(neighbors_list(k+1)-1, n_sites0) + 1
-      !   do j = 1, n_neigh(i)
-      !     k = k + 1
-      !     j2 = modulo(neighbors_list(k)-1, n_sites0) + 1
-
-      !     if( rjs(k) > rcut_inner .and. rjs(k) < rcut )then
-
-      !         this_force(1:3) = hirshfeld_v_cart_der(1:3, k) * ( pref_force1(i) + pref_force2(i) )
-      !         forces0(1:3, j2) = forces0(1:3, j2) + this_force(1:3)
-
-      !         do k1 = 1, 3
-      !           do k2 =1, 3
-      !             virial(k1, k2) = virial(k1, k2) + 0.5d0 * (this_force(k1)*xyz(k2,k) + this_force(k2)*xyz(k1,k))
-      !           end do
-      !         end do
-
-      !       if( r0_ij(k) == 0.d0 )then
-      !         this_force(1:3) = 0.d0
-      !       else
-      !         this_force(1:3) = neighbor_c6_ij(k) / rjs(k) * xyz(1:3,k) &
-      !                          * f_damp(k) * ( -r6_der(k) - r6(k) * f_damp(k) * exp_damp(k) &
-      !                                          * d / sR / r0_ij(k) )
-      !       end if
-
-      !       if( j2 /= i2 )then
-      !         forces0(1:3,i2) = forces0(1:3,i2) + this_force(1:3)
-      !       end if 
-            
-      !       do k1 = 1, 3
-      !         do k2 =1, 3
-      !           virial(k1, k2) = virial(k1, k2) - 0.25d0 * (this_force(k1)*xyz(k2,k) + this_force(k2)*xyz(k1,k))
-      !         end do
-      !       end do
-      !     end if
-      !   end do
-      ! end do
       
       call gpu_final_ts_forces_virial(i2_index_d, j2_index_d, i_site_index_d, &
                                       hirshfeld_v_cart_der_d, pref_force1_d, pref_force2_d, &
