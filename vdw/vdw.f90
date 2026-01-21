@@ -27,10 +27,400 @@
 ! HND XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 module vdw
+  use F_B_C
+  use iso_c_binding
 
 
   contains
 
+  
+!**************************************************************************
+  subroutine get_ts_energy_and_forces_gpu( hirshfeld_v, hirshfeld_v_cart_der, &
+                                       n_neigh, neighbors_list, neighbor_species, &
+                                       rcut, buffer, rcut_inner, buffer_inner, rjs, xyz, hirshfeld_v_neigh, &
+                                       sR, d, c6_ref, r0_ref, alpha0_ref, do_forces, &
+                                       energies, forces0, virial )
+
+    implicit none
+
+!   Input variables
+    real*8, intent(in) :: hirshfeld_v(:),  rcut, buffer, rcut_inner, buffer_inner, &
+                          hirshfeld_v_neigh(:), sR, d, c6_ref(:), r0_ref(:), &
+                          alpha0_ref(:)
+    real*8, intent(in), target ::xyz(:,:), rjs(:), hirshfeld_v_cart_der(:,:)
+    integer, intent(in) :: n_neigh(:), neighbors_list(:), neighbor_species(:)
+    logical, intent(in) :: do_forces
+!   Output variables
+    real*8, intent(out),target :: virial(1:3, 1:3)
+!   In-Out variables
+    real*8, intent(inout), target :: energies(:), forces0(:,:)
+!   Internal variables
+    real*8, allocatable,target :: neighbor_c6_ii(:), neighbor_c6_ij(:), r0_ii(:), r0_ij(:), &
+                           exp_damp(:), f_damp(:), c6_ij_free(:), neighbor_alpha0(:), &
+                           pref_force1(:), pref_force2(:), r6(:), r6_der(:)
+    real*8 :: time1, time2, c6_ii, c6_jj, r0_i, r0_j, alpha0_i, alpha0_j, rbuf, this_force(1:3)
+    integer, allocatable:: i_buffer(:)
+    integer :: n_sites, n_pairs, n_species, n_sites0
+    integer :: i, j, i2, j2, k, n_in_buffer, k1, k2
+    logical, allocatable :: is_in_buffer(:)
+    logical :: do_timing = .false.
+    integer(c_int) :: valuetoset
+    type(c_ptr) :: cublas_handle, gpu_stream
+    type(c_ptr) :: j2_index_d, i2_index_d, i_site_index_d
+    integer(c_int), allocatable, target :: j2_index(:),  i2_index(:),  i_site_index(:)
+    integer(c_size_t) :: st_n_pairs, st_forces0,st_virial
+    integer(c_size_t) :: st_pref_force1,st_pref_force2,st_hirshfeld_v_cart_der, st_exp_damp
+    integer(c_size_t) :: st_f_damp,st_r0_ij,st_rjs,st_xyz,st_neighbor_c6_ij,st_r6,st_r6_der
+    type(c_ptr) :: pref_force1_d, pref_force2_d, hirshfeld_v_cart_der_d, exp_damp_d, f_damp_d
+    type(c_ptr) :: r0_ij_d, rjs_d,xyz_d,neighbor_c6_ij_d, r6_d,r6_der_d,forces0_d, virial_d
+    
+    
+     valuetoset=0
+     call gpu_set_device(0) 
+     call create_cublas_handle(cublas_handle, gpu_stream)
+
+
+
+    n_sites = size(n_neigh)
+    n_pairs = size(neighbors_list)
+    n_species = size(c6_ref)
+    n_sites0 = size(forces0, 2)
+
+
+!   We precompute the C6 coefficients of all the neighbors
+    allocate( neighbor_c6_ii(1:n_pairs) )
+    allocate( neighbor_c6_ij(1:n_pairs) )
+    allocate( r0_ij(1:n_pairs) )
+    allocate( r0_ii(1:n_pairs) )
+    allocate( neighbor_alpha0(1:n_pairs) )
+    allocate( exp_damp(1:n_pairs) )
+    allocate( f_damp(1:n_pairs) )
+    allocate( c6_ij_free(1:n_pairs) )
+    allocate( r6(1:n_pairs) )
+    allocate( is_in_buffer(1:n_pairs) )
+    is_in_buffer = .false.
+    if( do_forces )then
+      allocate( pref_force1(1:n_sites) )
+      allocate( pref_force2(1:n_sites) )
+      allocate( r6_der(1:n_pairs) )
+    end if
+
+    if( do_timing) then
+      call cpu_time(time1)
+    end if
+
+!   Check which atoms are in the buffer region
+    do k = 1, n_pairs
+      j = neighbor_species(k)
+      neighbor_c6_ii(k) = c6_ref(j)
+      r0_ii(k) = r0_ref(j)
+      neighbor_alpha0(k) = alpha0_ref(j)
+    end do
+    n_in_buffer = 0
+    if( buffer > 0.d0 .or. buffer_inner > 0.d0 )then
+      do k = 1, n_pairs
+        if( (rjs(k) > rcut-buffer .and. rjs(k) < rcut) .or. &
+            (rjs(k) < rcut_inner+buffer_inner .and. rjs(k) > rcut_inner) )then
+          n_in_buffer = n_in_buffer + 1
+          is_in_buffer(k) = .true.
+        end if
+      end do
+    end if
+    allocate( i_buffer(1:n_in_buffer) )
+    if( buffer > 0.d0 .or. buffer_inner > 0.d0 )then
+      i = 0
+      do k = 1, n_pairs
+        if( is_in_buffer(k) )then
+          i = i + 1
+          i_buffer(i) = k
+        end if
+      end do
+    end if
+
+!   Precompute r6 = 1/r^6 * cutoff(r) and its derivative
+    r6 = 1.d0 / rjs**6
+!   We do the forces first, so that we have not modified r6 yet
+    if( do_forces )then
+      r6_der = -6.d0 / rjs * r6
+      do i = 1, n_in_buffer
+        k = i_buffer(i)
+        if( rjs(k) <= rcut_inner + buffer_inner )then
+          rbuf = -(rjs(k)-rcut_inner-buffer_inner)/buffer_inner
+          r6_der(k) = r6_der(k) + 6.d0 * r6(k) / (-buffer_inner) * (-rbuf + rbuf**2)
+        else
+          rbuf = (rjs(k)-rcut+buffer)/buffer
+          r6_der(k) = r6_der(k) + 6.d0 * r6(k) / buffer * (-rbuf + rbuf**2)
+        end if
+      end do
+    end if
+!   Now we do these terms
+    do i = 1, n_in_buffer
+      k = i_buffer(i)
+      if( rjs(k) <= rcut_inner + buffer_inner )then
+        rbuf = (rjs(k)-rcut_inner-buffer_inner)/(-buffer_inner)
+      else
+        rbuf = (rjs(k)-rcut+buffer)/buffer
+      end if
+      r6(k) = r6(k) * ( 1.d0 - 3.d0*rbuf**2 + 2.d0*rbuf**3 )
+    end do
+
+    if( do_timing) then
+      call cpu_time(time2)
+      write(*,*) "vdw: creating pair quantities 1:", time2-time1
+      call cpu_time(time1)
+    end if
+
+!   Precompute some other pair quantities
+    neighbor_c6_ii = neighbor_c6_ii * hirshfeld_v_neigh**2
+!   This is slow, could replace by Taylor expansion maybe
+    r0_ii = r0_ii * hirshfeld_v_neigh**(1.d0/3.d0)
+    neighbor_alpha0 = neighbor_alpha0 * hirshfeld_v_neigh
+
+    if( do_timing) then
+      call cpu_time(time2)
+      write(*,*) "vdw: creating pair quantities 2:", time2-time1
+      call cpu_time(time1)
+    end if
+
+!   Computing pair parameters
+    k = 0
+    do i = 1, n_sites
+      k = k + 1
+      c6_ii = neighbor_c6_ii(k)
+      r0_i = r0_ii(k)
+      alpha0_i = neighbor_alpha0(k)
+!     We don't really need these ones but whatever
+      neighbor_c6_ij(k) = c6_ii
+      r0_ij(k) = r0_i
+      do j = 2, n_neigh(i)
+        k = k + 1
+        c6_jj = neighbor_c6_ii(k)
+        alpha0_j = neighbor_alpha0(k)
+        if( c6_ii == 0.d0 .or. c6_jj == 0.d0 )then
+          neighbor_c6_ij(k) = 0.d0
+        else
+          neighbor_c6_ij(k) = (2.d0 * c6_ii * c6_jj) / (alpha0_j/alpha0_i * c6_ii + alpha0_i/alpha0_j * c6_jj)
+        end if
+        r0_j = r0_ii(k)
+        r0_ij(k) = r0_i + r0_j
+      end do
+    end do
+
+    if( do_timing) then
+      call cpu_time(time2)
+      write(*,*) "vdw: creating pair quantities 3:", time2-time1
+      call cpu_time(time1)
+    end if
+
+!   Compute the TS local energies
+    f_damp = 0.d0
+    k = 0
+    do i = 1, n_sites
+      k = k + 1
+      do j = 2, n_neigh(i)
+        k = k + 1
+        if( rjs(k) > rcut_inner .and. rjs(k) < rcut )then
+          exp_damp(k) = exp( -d*(rjs(k)/(sR*r0_ij(k)) - 1.d0) )
+          f_damp(k) = 1.d0/( 1.d0 + exp_damp(k) )
+          energies(i) = energies(i) + neighbor_c6_ij(k) * r6(k) * f_damp(k)
+        end if         
+      end do
+    end do
+    energies = -0.5d0 * energies
+
+    if( do_timing) then
+      call cpu_time(time2)
+      write(*,*) "vdw: computing energies:", time2-time1
+      call cpu_time(time1)
+    end if
+
+!   Compute TS forces
+    if( do_forces )then
+      forces0 = 0.d0
+      virial = 0.d0
+!     First, we compute the forces acting on all the "SOAP-neighbors" of atom i
+!     (including i itself) due to the gradients of i's Hirshfeld volume wrt the
+!     positions of its neighbors 
+      pref_force1 = 0.d0
+      pref_force2 = 0.d0
+      k = 0
+      do i = 1, n_sites
+        k = k + 1
+        i2 = neighbor_species(k)
+        do j = 2, n_neigh(i)
+          k = k + 1
+          if( rjs(k) > rcut_inner .and. rjs(k) < rcut )then
+!           For the dependence of C6_ij on the V_A
+            pref_force1(i) = pref_force1(i) + neighbor_c6_ij(k) * f_damp(k) * r6(k)
+!           For the dependence of f_damp on the V_A
+            pref_force2(i) = pref_force2(i) - neighbor_c6_ij(k) * f_damp(k)**2 * rjs(k) * r6(k) * &
+                             exp_damp(k) * d / sR / r0_ij(k)**2
+          end if
+        end do
+!       Make sure no NaNs arise for zero Hirshfeld volumes
+        if( hirshfeld_v(i) == 0.d0 )then
+          pref_force1(i) = 0.d0
+          pref_force2(i) = 0.d0
+        else
+          pref_force1(i) = pref_force1(i) / hirshfeld_v(i)
+          pref_force2(i) = pref_force2(i) * r0_ref(i2) / 3.d0 / hirshfeld_v(i)**(2.d0/3.d0)
+        end if
+      end do
+
+
+! Here copy pref_force1,2, f_damp, hirshfflef thingy, exp_damp,r0_ij r6 and r6_der to GPU
+      st_pref_force1=sizeof(pref_force1)
+      st_pref_force2=sizeof(pref_force2)
+      st_hirshfeld_v_cart_der=sizeof( hirshfeld_v_cart_der)
+      st_exp_damp=sizeof(exp_damp)
+      st_f_damp=sizeof(f_damp)
+      st_r0_ij=sizeof(r0_ij)
+      st_rjs=sizeof(rjs)
+      st_xyz=sizeof(xyz)
+      st_neighbor_c6_ij=sizeof(neighbor_c6_ij)
+      st_r6=sizeof(r6)
+      st_r6_der=sizeof(r6_der)
+      st_forces0=sizeof(forces0)
+      st_virial=sizeof(virial)
+
+      call gpu_malloc_all(pref_force1_d, st_pref_force1, gpu_stream )
+      call gpu_malloc_all(pref_force2_d, st_pref_force2, gpu_stream )
+      call gpu_malloc_all(hirshfeld_v_cart_der_d, st_hirshfeld_v_cart_der, gpu_stream )
+      call gpu_malloc_all(exp_damp_d, st_exp_damp, gpu_stream )
+      call gpu_malloc_all(f_damp_d, st_f_damp, gpu_stream )
+      call gpu_malloc_all(r0_ij_d, st_r0_ij, gpu_stream )
+      call gpu_malloc_all(rjs_d, st_rjs, gpu_stream )
+      call gpu_malloc_all(xyz_d, st_xyz, gpu_stream )
+      call gpu_malloc_all(neighbor_c6_ij_d, st_neighbor_c6_ij, gpu_stream )
+      call gpu_malloc_all(r6_d, st_r6, gpu_stream )
+      call gpu_malloc_all(r6_der_d, st_r6_der, gpu_stream )
+      call gpu_malloc_all(forces0_d, st_forces0, gpu_stream )
+      call gpu_malloc_all(virial_d, st_virial, gpu_stream )
+
+      call cpy_htod(c_loc(pref_force1),pref_force1_d, st_pref_force1, gpu_stream )
+      call cpy_htod(c_loc(pref_force2), pref_force2_d, st_pref_force2, gpu_stream )
+      call cpy_htod(c_loc(hirshfeld_v_cart_der),hirshfeld_v_cart_der_d, st_hirshfeld_v_cart_der, gpu_stream )
+      call cpy_htod(c_loc(exp_damp),exp_damp_d, st_exp_damp, gpu_stream )
+      call cpy_htod(c_loc(f_damp),f_damp_d, st_f_damp, gpu_stream )
+      call cpy_htod(c_loc(r0_ij),r0_ij_d, st_r0_ij, gpu_stream )
+      call cpy_htod(c_loc(rjs),rjs_d, st_rjs, gpu_stream )
+      call cpy_htod(c_loc(xyz),xyz_d, st_xyz, gpu_stream )
+      call cpy_htod(c_loc(neighbor_c6_ij), neighbor_c6_ij_d, st_neighbor_c6_ij, gpu_stream )
+      call cpy_htod(c_loc(r6), r6_d, st_r6, gpu_stream )
+      call cpy_htod(c_loc(r6_der), r6_der_d, st_r6_der, gpu_stream )
+      call cpy_htod(c_loc(forces0), forces0_d, st_forces0, gpu_stream )
+      call cpy_htod(c_loc(virial), virial_d, st_virial, gpu_stream )
+
+    
+
+      allocate(j2_index(1:n_pairs))
+      allocate(i2_index(1:n_pairs))
+      allocate(i_site_index(1:n_pairs))
+      
+      k = 0.0
+      do i = 1, n_sites
+        i2 = modulo(neighbors_list(k+1)-1, n_sites0) + 1
+        do j = 1, n_neigh(i)
+          k = k + 1
+          j2 = modulo(neighbors_list(k)-1, n_sites0) + 1
+          j2_index(k)=j2
+          i2_index(k)=i2
+          i_site_index(k)=i
+        end do
+      end do
+
+      st_n_pairs=n_pairs*sizeof(j2_index(1))
+      call gpu_malloc_all(j2_index_d, st_n_pairs, gpu_stream)
+      call cpy_htod(c_loc(j2_index),j2_index_d, st_n_pairs, gpu_stream)
+      call gpu_malloc_all(i2_index_d, st_n_pairs, gpu_stream)
+      call cpy_htod(c_loc(i2_index),i2_index_d, st_n_pairs, gpu_stream)
+      call gpu_malloc_all(i_site_index_d, st_n_pairs, gpu_stream)
+      call cpy_htod(c_loc(i_site_index),i_site_index_d, st_n_pairs, gpu_stream)
+
+      ! k = 0
+      ! do i = 1, n_sites
+      !   i2 = modulo(neighbors_list(k+1)-1, n_sites0) + 1
+      !   do j = 1, n_neigh(i)
+      !     k = k + 1
+      !     j2 = modulo(neighbors_list(k)-1, n_sites0) + 1
+
+      !     if( rjs(k) > rcut_inner .and. rjs(k) < rcut )then
+
+      !         this_force(1:3) = hirshfeld_v_cart_der(1:3, k) * ( pref_force1(i) + pref_force2(i) )
+      !         forces0(1:3, j2) = forces0(1:3, j2) + this_force(1:3)
+
+      !         do k1 = 1, 3
+      !           do k2 =1, 3
+      !             virial(k1, k2) = virial(k1, k2) + 0.5d0 * (this_force(k1)*xyz(k2,k) + this_force(k2)*xyz(k1,k))
+      !           end do
+      !         end do
+
+      !       if( r0_ij(k) == 0.d0 )then
+      !         this_force(1:3) = 0.d0
+      !       else
+      !         this_force(1:3) = neighbor_c6_ij(k) / rjs(k) * xyz(1:3,k) &
+      !                          * f_damp(k) * ( -r6_der(k) - r6(k) * f_damp(k) * exp_damp(k) &
+      !                                          * d / sR / r0_ij(k) )
+      !       end if
+
+      !       if( j2 /= i2 )then
+      !         forces0(1:3,i2) = forces0(1:3,i2) + this_force(1:3)
+      !       end if 
+            
+      !       do k1 = 1, 3
+      !         do k2 =1, 3
+      !           virial(k1, k2) = virial(k1, k2) - 0.25d0 * (this_force(k1)*xyz(k2,k) + this_force(k2)*xyz(k1,k))
+      !         end do
+      !       end do
+      !     end if
+      !   end do
+      ! end do
+      
+      call gpu_final_ts_forces_virial(i2_index_d, j2_index_d, i_site_index_d, &
+                                      hirshfeld_v_cart_der_d, pref_force1_d, pref_force2_d, &
+                                      neighbor_c6_ij_d, rjs_d, xyz_d, f_damp_d, exp_damp_d, &
+                                      r0_ij_d, r6_d, r6_der_d,  &
+                                      forces0_d,virial_d, &
+                                      rcut_inner, rcut, n_pairs,  d,  sR, &
+                                      gpu_stream )
+      
+      call gpu_free_async(j2_index_d, gpu_stream)
+      call gpu_free_async(i2_index_d, gpu_stream)
+      call gpu_free_async(i_site_index_d, gpu_stream)
+      call gpu_free_async(pref_force1_d, gpu_stream )
+      call gpu_free_async(pref_force2_d, gpu_stream )
+      call gpu_free_async(hirshfeld_v_cart_der_d, gpu_stream )
+      call gpu_free_async(exp_damp_d, gpu_stream )
+      call gpu_free_async(f_damp_d, gpu_stream )
+      call gpu_free_async(r0_ij_d, gpu_stream )
+      call gpu_free_async(rjs_d, gpu_stream )
+      call gpu_free_async(xyz_d, gpu_stream )
+      call gpu_free_async(neighbor_c6_ij_d, gpu_stream )
+      call gpu_free_async(r6_d, gpu_stream )
+      call gpu_free_async(r6_der_d, gpu_stream )
+
+      call cpy_dtoh(forces0_d, c_loc(forces0), st_forces0, gpu_stream )
+      call gpu_free_async(forces0_d, gpu_stream )
+
+      call cpy_dtoh(virial_d, c_loc(virial), st_virial, gpu_stream )
+      call gpu_free_async(virial_d, gpu_stream )
+
+    end if
+    
+    call  gpu_device_sync()
+    if( do_timing) then
+      call cpu_time(time2)
+      write(*,*) "vdw: computing forces:", time2-time1
+    end if
+ 
+!   Clean up
+    deallocate( neighbor_c6_ii, neighbor_c6_ij, r0_ij, exp_damp, f_damp, c6_ij_free, r6, is_in_buffer, i_buffer )
+    if( do_forces )then
+      deallocate( pref_force1, pref_force2, r6_der )
+    end if
+
+  end subroutine
+!**************************************************************************
 
 !**************************************************************************
   subroutine hirshfeld_predict( soap, Qs, alphas, V0, delta, zeta, V, &
