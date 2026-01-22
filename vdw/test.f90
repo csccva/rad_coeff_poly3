@@ -39,6 +39,8 @@ program turbotest
   close(41)
   
   write(*,*)  "CPU vdw energy", sum(this_energies_vdw)
+
+  write(*,*) "CPU virial ", this_virial_vdw 
         
   open(unit=43,file="cpu_forces.output", status="unknown")
   do j=1,size(this_forces_vdw,2)
@@ -76,6 +78,8 @@ program turbotest
   close(41)
   
   write(*,*) "GPU vdw energy", sum(this_energies_vdw)
+
+  write(*,*) "GPU virial ", this_virial_vdw 
         
   open(unit=43,file="gpu_forces.output", status="unknown")
   do j=1,size(this_forces_vdw,2)

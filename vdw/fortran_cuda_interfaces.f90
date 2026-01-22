@@ -100,5 +100,24 @@ MODULE F_B_C
         type(c_ptr) :: gpu_stream
       end subroutine
 
+      subroutine gpu_compute_damp_energy(energies_d, f_damp_d, exp_damp_d, &
+                                         rjs_d, r0_ij_d, r6_d, neighbor_c6_ij_d, &
+                                         n_neigh_d, k_start_index_d, &
+                                         rcut_inner, rcut, d, sR, &
+                                         n_sites, gpu_stream ) &
+                                         bind(C,name="gpu_compute_damp_energy")
+
+        use iso_c_binding
+        implicit none
+        real(c_double), value :: rcut_inner, rcut, d, sR
+        integer(c_int),  value :: n_sites
+        type(c_ptr), value :: energies_d
+        type(c_ptr), value :: f_damp_d, exp_damp_d
+        type(c_ptr), value :: rjs_d, r0_ij_d, r6_d
+        type(c_ptr), value :: neighbor_c6_ij_d
+        type(c_ptr), value :: n_neigh_d, k_start_index_d
+        type(c_ptr) :: gpu_stream
+      end subroutine
+
     END INTERFACE
   END MODULE F_B_C

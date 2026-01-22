@@ -249,3 +249,64 @@ extern "C" void gpu_compute_pref_forces(double *pref_force1_d, double *pref_forc
                                                                     rcut_inner, rcut, d, sR,
                                                                     n_pairs, n_sites);
 }
+
+__global__ void cuda_compute_damp_energy(double *energies_d,double *f_damp_d,double *exp_damp_d,
+                                           double *rjs_d, double *r0_ij_d, double *r6_d, double *neighbor_c6_ij_d,
+                                           int *n_neigh_d, int *k_start_index_d,
+                                           double rcut_inner, double rcut, double d, double sR,
+                                           int n_sites)
+{
+    int i_site = blockIdx.x;
+    int tid    = threadIdx.x;
+
+    int k_start     = k_start_index_d[i_site];
+    int my_n_neigh  = n_neigh_d[i_site];
+
+    __shared__ double shenergy[tpb_pref_force];
+    shenergy[tid] = 0.0;
+    __syncthreads();
+
+    for (int j = tid; j < my_n_neigh; j += tpb_pref_force) {
+        if (j > 0) {   // j = 2..n_neigh in Fortran
+            int k = k_start + j;
+
+            double rjs = rjs_d[k];
+            if (rjs > rcut_inner && rjs < rcut) {
+                double locexp_damp = exp(-d * (rjs / (sR * r0_ij_d[k]) - 1.0));
+                double locf_damp   = 1.0 / (1.0 + locexp_damp);
+
+                exp_damp_d[k] = locexp_damp;
+                f_damp_d[k]   = locf_damp;
+
+                shenergy[tid] += neighbor_c6_ij_d[k] * r6_d[k] * locf_damp;
+            }
+        }
+    }
+
+    __syncthreads();
+
+    // reduction
+    for (int s = tpb_pref_force / 2; s > 0; s >>= 1) {
+        if (tid < s)
+            shenergy[tid] += shenergy[tid + s];
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        energies_d[i_site] = -0.5 * shenergy[0];
+    }
+}
+extern "C" void gpu_compute_damp_energy(double *energies_d, double *f_damp_d, double *exp_damp_d,
+                                        double *rjs_d, double *r0_ij_d, double *r6_d, double *neighbor_c6_ij_d,
+                                        int *n_neigh_d, int *k_start_index_d, 
+                                        double rcut_inner, double rcut, double d, double sR,
+                                        int n_sites,
+                                        hipStream_t *stream){
+   
+   cuda_compute_damp_energy<<<n_sites, tpb_pref_force, 0, stream[0]>>>(energies_d,f_damp_d, exp_damp_d,
+                                                                       rjs_d, r0_ij_d, r6_d, neighbor_c6_ij_d,
+                                                                       n_neigh_d, k_start_index_d,
+                                                                       rcut_inner, rcut, d, sR,
+                                                                       n_sites);
+}
+
