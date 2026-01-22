@@ -13,6 +13,7 @@
 
 
 #define tpb 64
+#define tpb_pref_force 64
 #define tpb_get_soap_der_one 128
 
 
@@ -168,4 +169,83 @@ extern "C" void gpu_final_ts_forces_virial(int *i2_index_d, int *j2_index_d, int
                                            forces_d, virial_d,
                                            rcut_inner, rcut,   n_pairs,  d, sR);
 }
-            
+
+
+__global__ void cuda_compute_pref_forces(double *pref_force1_d, double *pref_force2_d,
+                                         double *hirshfeld_v_d,double *r0_ref_d, 
+                                         double *r6_d,double *r0_ij_d, double *rjs_d,
+                                         double *neighbor_c6_ij_d, double *f_damp_d, double *exp_damp_d,
+                                         int *n_neigh_d, int *i2_k_index_d, int *k_start_index_d, 
+                                         double rcut_inner, double rcut, double d, double sR,
+                                         int n_pairs, int n_sites){
+   int i_site=blockIdx.x;
+   int tid=threadIdx.x;
+   int k_start=k_start_index_d[i_site];
+   int my_n_neigh=n_neigh_d[i_site];
+   double locrjs,locr0_ij,locr6,locf_damp,locexp_damp, locneighbor_c6_ij;
+   int k;
+
+   __shared__ double shpreff1[tpb_pref_force], shpreff2[tpb_pref_force];
+   shpreff1[tid]=0.0;
+   shpreff2[tid]=0.0;
+   __syncthreads();
+   for(int j=tid;j<my_n_neigh;j+=tpb_pref_force){
+      k=k_start+j;
+      locrjs=rjs_d[k]; 
+      locr0_ij=r0_ij_d[k];
+      locr6=r6_d[k];
+      locf_damp=f_damp_d[k]; 
+      locexp_damp=exp_damp_d[k];
+      locneighbor_c6_ij=neighbor_c6_ij_d[k];
+      if(locrjs>rcut_inner && locrjs<rcut && j>0){
+         shpreff1[tid]+=locneighbor_c6_ij*locf_damp*locr6;
+         shpreff2[tid]+=-locneighbor_c6_ij*locf_damp*locf_damp*locrjs*locr6*locexp_damp*d/sR/pow(locr0_ij,2);
+      }
+   }
+    __syncthreads();
+  //reduction
+  for (int s=tpb_pref_force/2; s>0; s>>=1) //  s>>=1 <==> s=s/2
+  {
+    if (tid < s)
+    {
+      shpreff1[tid]+=shpreff1[tid+s];
+      shpreff2[tid]+=shpreff2[tid+s];
+    }
+    __syncthreads();
+  }
+
+   if(threadIdx.x==0){
+      double locpref_force1=shpreff1[0];
+      double locpref_force2=shpreff2[0];
+
+      int i2=i2_k_index_d[i_site]-1;
+      double loch_v=hirshfeld_v_d[i_site];
+      if(loch_v==0.0){
+         locpref_force1=0.0;
+         locpref_force2=0.0;
+      }
+      else{
+         locpref_force1=locpref_force1/ loch_v;
+         locpref_force2=locpref_force2*r0_ref_d[i2]/3.0/pow(loch_v,2.0/3.0);
+      }
+      pref_force1_d[i_site]=locpref_force1;
+      pref_force2_d[i_site]=locpref_force2;
+   }
+}
+extern "C" void gpu_compute_pref_forces(double *pref_force1_d, double *pref_force2_d,
+                                        double *hirshfeld_v_d,double *r0_ref_d, 
+                                        double *r6_d,double *r0_ij_d, double *rjs_d,
+                                        double *neighbor_c6_ij_d, double *f_damp_d, double *exp_damp_d,
+                                        int *n_neigh_d, int *i2_k_index_d, int *k_start_index_d, 
+                                        double rcut_inner, double rcut, double d, double sR,
+                                        int n_pairs, int n_sites,
+                                        hipStream_t *stream ){
+   int nblocks=n_sites;
+   cuda_compute_pref_forces<<<nblocks,tpb_pref_force,0,stream[0]>>>(pref_force1_d, pref_force2_d,
+                                                                    hirshfeld_v_d,r0_ref_d, 
+                                                                    r6_d,r0_ij_d, rjs_d,
+                                                                    neighbor_c6_ij_d,f_damp_d, exp_damp_d,
+                                                                    n_neigh_d, i2_k_index_d, k_start_index_d, 
+                                                                    rcut_inner, rcut, d, sR,
+                                                                    n_pairs, n_sites);
+}

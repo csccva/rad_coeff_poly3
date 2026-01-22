@@ -73,34 +73,24 @@ print(site_mean_F.mean(axis=0))
 
 
 # ======================
-# Virial (3x3 tensor)
+# Virial (3x3 tensor) - NO SITE INDEX
 # ======================
-cpu = np.loadtxt("cpu_virial.output")
-gpu = np.loadtxt("gpu_virial.output")
+cpu_V = np.loadtxt("cpu_virial.output")
+gpu_V = np.loadtxt("gpu_virial.output")
 
-cpu_site = cpu[:, 0].astype(int)
-gpu_site = gpu[:, 0].astype(int)
-
-cpu_V = cpu[:, 1:4]
-gpu_V = gpu[:, 1:4]
-
-check_matching(cpu_site, gpu_site, "virial")
-
+# Virial is a single 3x3 tensor (no per-site data)
 diff_V = np.abs(gpu_V - cpu_V)
 
-sites_V, site_mean_V = per_site_mean_diff(cpu_site, diff_V)
-
-# site_mean_V has shape (nsite, 3) but represents row-wise averages;
-# reshape to full 3x3 per site if you want tensors
 np.savetxt(
     "per_site_mean_diff_virial.txt",
-    np.column_stack([sites_V, site_mean_V]),
-    header="v1  v2  v3   (row-wise mean abs diff)",
+    diff_V,
+    header="Virial absolute difference (3x3 tensor)\nv1  v2  v3",
     fmt="%.6e %.6e %.6e"
 )
 
-print("Virial overall mean diff (row-wise):")
-print(site_mean_V.mean(axis=0))
+print("\nVirial absolute difference:")
+print(diff_V)
+print("\nVirial overall mean diff:", diff_V.mean())
 
 
 # ======================

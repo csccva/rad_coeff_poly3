@@ -76,5 +76,29 @@ MODULE F_B_C
         type(c_ptr) :: gpu_stream
       end subroutine
 
+
+
+      subroutine gpu_compute_pref_forces(pref_force1_d, pref_force2_d, &
+                                         hirshfeld_v_d, r0_ref_d, & 
+                                         r6_d, r0_ij_d, rjs_d, &
+                                         neighbor_c6_ij_d, f_damp_d, exp_damp_d, &
+                                         n_neigh_d, i2_k_index_d, k_start_index_d, &
+                                         rcut_inner, rcut, d, sR, &
+                                         n_pairs, n_sites, &
+                                         gpu_stream ) &
+                                         bind(C,name="gpu_compute_pref_forces")
+        use iso_c_binding
+        implicit none
+        real(c_double),value :: rcut_inner, rcut, d, sR
+        type(c_ptr),value :: pref_force1_d, pref_force2_d
+        type(c_ptr),value :: hirshfeld_v_d, r0_ref_d
+        type(c_ptr),value :: n_neigh_d, i2_k_index_d, k_start_index_d
+        type(c_ptr),value :: r6_d, r0_ij_d, rjs_d
+        type(c_ptr),value :: neighbor_c6_ij_d, f_damp_d, exp_damp_d
+
+        integer(c_int),value :: n_pairs,n_sites
+        type(c_ptr) :: gpu_stream
+      end subroutine
+
     END INTERFACE
   END MODULE F_B_C
