@@ -187,29 +187,29 @@ module vdw
       call cpu_time(time1)
     end if
 
-!   Computing pair parameters
-    k = 0
-    do i = 1, n_sites
-      k = k + 1
-      c6_ii = neighbor_c6_ii(k)
-      r0_i = r0_ii(k)
-      alpha0_i = neighbor_alpha0(k)
-!     We don't really need these ones but whatever
-      neighbor_c6_ij(k) = c6_ii
-      r0_ij(k) = r0_i
-      do j = 2, n_neigh(i)
-        k = k + 1
-        c6_jj = neighbor_c6_ii(k)
-        alpha0_j = neighbor_alpha0(k)
-        if( c6_ii == 0.d0 .or. c6_jj == 0.d0 )then
-          neighbor_c6_ij(k) = 0.d0
-        else
-          neighbor_c6_ij(k) = (2.d0 * c6_ii * c6_jj) / (alpha0_j/alpha0_i * c6_ii + alpha0_i/alpha0_j * c6_jj)
-        end if
-        r0_j = r0_ii(k)
-        r0_ij(k) = r0_i + r0_j
-      end do
-    end do
+! !   Computing pair parameters
+!     k = 0
+!     do i = 1, n_sites
+!       k = k + 1
+!       c6_ii = neighbor_c6_ii(k)
+!       r0_i = r0_ii(k)
+!       alpha0_i = neighbor_alpha0(k)
+! !     We don't really need these ones but whatever
+!       neighbor_c6_ij(k) = c6_ii
+!       r0_ij(k) = r0_i
+!       do j = 2, n_neigh(i)
+!         k = k + 1
+!         c6_jj = neighbor_c6_ii(k)
+!         alpha0_j = neighbor_alpha0(k)
+!         if( c6_ii == 0.d0 .or. c6_jj == 0.d0 )then
+!           neighbor_c6_ij(k) = 0.d0
+!         else
+!           neighbor_c6_ij(k) = (2.d0 * c6_ii * c6_jj) / (alpha0_j/alpha0_i * c6_ii + alpha0_i/alpha0_j * c6_jj)
+!         end if
+!         r0_j = r0_ii(k)
+!         r0_ij(k) = r0_i + r0_j
+!       end do
+!     end do
 
     if( do_timing) then
       call cpu_time(time2)
@@ -218,20 +218,7 @@ module vdw
     end if
 
 !   Compute the TS local energies
-    ! f_damp = 0.d0
-    ! k = 0
-    ! do i = 1, n_sites
-    !   k = k + 1
-    !   do j = 2, n_neigh(i)
-    !     k = k + 1
-    !     if( rjs(k) > rcut_inner .and. rjs(k) < rcut )then
-    !       exp_damp(k) = exp( -d*(rjs(k)/(sR*r0_ij(k)) - 1.d0) )
-    !       f_damp(k) = 1.d0/( 1.d0 + exp_damp(k) )
-    !       energies(i) = energies(i) + neighbor_c6_ij(k) * r6(k) * f_damp(k)
-    !     end if         
-    !   end do
-    ! end do
-    ! energies = -0.5d0 * energies
+    
     st_energies=sizeof(energies)
     st_exp_damp=sizeof(exp_damp)
     st_f_damp=sizeof(f_damp)

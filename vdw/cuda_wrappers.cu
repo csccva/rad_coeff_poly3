@@ -310,3 +310,73 @@ extern "C" void gpu_compute_damp_energy(double *energies_d, double *f_damp_d, do
                                                                        n_sites);
 }
 
+__global__ void cuda_compute_pair_params(double *neighbor_c6_ii_d, double *r0_ii_d, double *neighbor_alpha0_d,
+                                         double *neighbor_c6_ij_d, double *r0_ij_d, 
+                                         const int *n_neigh_d, const int *k_start_index_d,
+                                         int n_sites)
+{
+    int i_site = blockIdx.x;
+    int tid    = threadIdx.x;
+
+    int k_start    = k_start_index_d[i_site];
+    int my_n_neigh = n_neigh_d[i_site];
+
+    for (int j = tid ; j < my_n_neigh; j += blockDim.x) {
+        if(j==0){
+         double c6_ii     = neighbor_c6_ii_d[k_start];
+         double r0_i      = r0_ii_d[k_start];
+         double alpha0_i  = neighbor_alpha0_d[k_start];
+
+         neighbor_c6_ij_d[k_start] = c6_ii;
+         r0_ij_d[k_start]          = r0_i;
+         r0_ij_d[k_start] = r0_i;
+        }
+        else{
+         int k = k_start + j;
+
+         double c6_ii     = neighbor_c6_ii_d[k_start];
+         double r0_i      = r0_ii_d[k_start];
+         double alpha0_i  = neighbor_alpha0_d[k_start];
+
+
+         double c6_jj     = neighbor_c6_ii_d[k];
+         double alpha0_j  = neighbor_alpha0_d[k];
+
+         if (c6_ii == 0.0 || c6_jj == 0.0) {
+            neighbor_c6_ij_d[k] = 0.0;
+         } 
+         else {
+            neighbor_c6_ij_d[k] =
+                (2.0 * c6_ii * c6_jj) /
+                (alpha0_j / alpha0_i * c6_ii +
+                 alpha0_i / alpha0_j * c6_jj);
+         }
+
+         r0_ij_d[k] = r0_i + r0_ii_d[k];
+        }
+    }
+}
+
+extern "C"
+void gpu_compute_pair_params(
+    double *neighbor_c6_ii_d,
+    double *r0_ii_d,
+    double *neighbor_alpha0_d,
+    double *neighbor_c6_ij_d,
+    double *r0_ij_d,
+    int *n_neigh_d,
+    int *k_start_index_d,
+    int n_sites,
+    hipStream_t *stream)
+{
+    cuda_compute_pair_params<<<n_sites, tpb_pref_force, 0, stream[0]>>>(
+        neighbor_c6_ii_d,
+        r0_ii_d,
+        neighbor_alpha0_d,
+        neighbor_c6_ij_d,
+        r0_ij_d,
+        n_neigh_d,
+        k_start_index_d,
+        n_sites);
+}
+

@@ -119,5 +119,30 @@ MODULE F_B_C
         type(c_ptr) :: gpu_stream
       end subroutine
 
+      subroutine gpu_compute_pair_params( &
+        neighbor_c6_ii_d, r0_ii_d, neighbor_alpha0_d, &
+        neighbor_c6_ij_d, r0_ij_d, &
+        n_neigh_d, k_start_index_d, &
+        n_sites, gpu_stream ) &
+        bind(C,name="gpu_compute_pair_params")
+
+  use iso_c_binding
+  implicit none
+
+  integer(c_int), value :: n_sites
+
+  type(c_ptr), value :: neighbor_c6_ii_d
+  type(c_ptr), value :: r0_ii_d
+  type(c_ptr), value :: neighbor_alpha0_d
+  type(c_ptr), value :: neighbor_c6_ij_d
+  type(c_ptr), value :: r0_ij_d
+  type(c_ptr), value :: n_neigh_d
+  type(c_ptr), value :: k_start_index_d
+
+  type(c_ptr) :: gpu_stream
+
+end subroutine
+
+
     END INTERFACE
   END MODULE F_B_C
