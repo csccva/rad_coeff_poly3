@@ -259,8 +259,13 @@ module vdw
         end do
       enddo
 !       Make sure no NaNs arise for zero Hirshfeld volumes
-        
+      k=0  
       do i = 1, n_sites
+        k = k + 1
+        i2 = neighbor_species(k)
+        do j=2,n_neigh(i)
+          k=k+1
+        enddo
         if( hirshfeld_v(i) == 0.d0 )then
           pref_force1(i) = 0.d0
           pref_force2(i) = 0.d0
@@ -285,6 +290,7 @@ module vdw
       st_r6_der=sizeof(r6_der)
       st_forces0=sizeof(forces0)
       st_virial=sizeof(virial)
+      !st_hirshfeld_v=sizeof(hirshfeld_v)
 
       call gpu_malloc_all(pref_force1_d, st_pref_force1, gpu_stream )
       call gpu_malloc_all(pref_force2_d, st_pref_force2, gpu_stream )
@@ -299,6 +305,7 @@ module vdw
       call gpu_malloc_all(r6_der_d, st_r6_der, gpu_stream )
       call gpu_malloc_all(forces0_d, st_forces0, gpu_stream )
       call gpu_malloc_all(virial_d, st_virial, gpu_stream )
+      !call gpu_malloc_all(hirshfeld_v_d,st_hirshfeld_v,gpu_stream)
 
       call cpy_htod(c_loc(pref_force1),pref_force1_d, st_pref_force1, gpu_stream )
       call cpy_htod(c_loc(pref_force2), pref_force2_d, st_pref_force2, gpu_stream )
@@ -313,6 +320,7 @@ module vdw
       call cpy_htod(c_loc(r6_der), r6_der_d, st_r6_der, gpu_stream )
       call cpy_htod(c_loc(forces0), forces0_d, st_forces0, gpu_stream )
       call cpy_htod(c_loc(virial), virial_d, st_virial, gpu_stream )
+      !call cpy_htod(c_loc(hirshfeld_v),hirshfeld_v_d,st_hirshfeld_v,gpu_stream)
 
     
 
@@ -340,6 +348,7 @@ module vdw
       call gpu_malloc_all(i_site_index_d, st_n_pairs, gpu_stream)
       call cpy_htod(c_loc(i_site_index),i_site_index_d, st_n_pairs, gpu_stream)
       
+      !call gpu_pref_force(hirshfeld_v_d, r0_ref)
       call gpu_final_ts_forces_virial(i2_index_d, j2_index_d, i_site_index_d, &
                                       hirshfeld_v_cart_der_d, pref_force1_d, pref_force2_d, &
                                       neighbor_c6_ij_d, rjs_d, xyz_d, f_damp_d, exp_damp_d, &
