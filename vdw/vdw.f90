@@ -319,8 +319,6 @@ module vdw
       call cpy_htod(c_loc(hirshfeld_v),hirshfeld_v_d,st_hirshfeld_v,gpu_stream)
       call cpy_htod(c_loc(r0_ref),r0_ref_d,st_r0_ref,gpu_stream)
 
-
-
       allocate(j2_index(1:n_pairs))
       allocate(i2_index(1:n_pairs))
       allocate(i2_k_index(n_sites))
