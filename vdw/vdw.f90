@@ -59,7 +59,7 @@ module vdw
                            exp_damp(:), f_damp(:), c6_ij_free(:), neighbor_alpha0(:), &
                            pref_force1(:), pref_force2(:), r6(:), r6_der(:)
     real*8 :: time1, time2, c6_ii, c6_jj, r0_i, r0_j, alpha0_i, alpha0_j, rbuf, this_force(1:3)
-    integer, allocatable:: i_buffer(:)
+    integer, allocatable, target:: i_buffer(:)
     integer :: n_sites, n_pairs, n_species, n_sites0
     integer :: i, j, i2, j2, k, n_in_buffer, k1, k2
     logical, allocatable :: is_in_buffer(:)
@@ -78,7 +78,10 @@ module vdw
     type(c_ptr) :: r0_ij_d, rjs_d,xyz_d,neighbor_c6_ij_d, r6_d,r6_der_d,forces0_d, virial_d
     type(c_ptr) :: hirshfeld_v_d,r0_ref_d, i2_k_index_d, k_start_index_d
     type(c_ptr) :: energies_d
-    
+    integer(c_size_t) :: st_r0_ii,st_neighbor_c6_ii,st_neighbor_alpha0,st_hirshfeld_v_neigh
+    integer(c_size_t) :: st_i_buffer, st_neighbor_species,st_c6_ref,st_alpha0_ref
+    type(c_ptr) :: r0_ii_d,neighbor_c6_ii_d,neighbor_alpha0_d,hirshfeld_v_neigh_d
+    type(c_ptr) :: i_buffer_d,neighbor_species_d,c6_ref_d,alpha0_ref_d
     
      valuetoset=0
      call gpu_set_device(0) 
@@ -114,108 +117,6 @@ module vdw
       call cpu_time(time1)
     end if
 
-!   Check which atoms are in the buffer region
-    do k = 1, n_pairs
-      j = neighbor_species(k)
-      neighbor_c6_ii(k) = c6_ref(j)
-      r0_ii(k) = r0_ref(j)
-      neighbor_alpha0(k) = alpha0_ref(j)
-    end do
-    n_in_buffer = 0
-    if( buffer > 0.d0 .or. buffer_inner > 0.d0 )then
-      do k = 1, n_pairs
-        if( (rjs(k) > rcut-buffer .and. rjs(k) < rcut) .or. &
-            (rjs(k) < rcut_inner+buffer_inner .and. rjs(k) > rcut_inner) )then
-          n_in_buffer = n_in_buffer + 1
-          is_in_buffer(k) = .true.
-        end if
-      end do
-    end if
-    allocate( i_buffer(1:n_in_buffer) )
-    if( buffer > 0.d0 .or. buffer_inner > 0.d0 )then
-      i = 0
-      do k = 1, n_pairs
-        if( is_in_buffer(k) )then
-          i = i + 1
-          i_buffer(i) = k
-        end if
-      end do
-    end if
-
-!   Precompute r6 = 1/r^6 * cutoff(r) and its derivative
-    r6 = 1.d0 / rjs**6
-!   We do the forces first, so that we have not modified r6 yet
-    if( do_forces )then
-      r6_der = -6.d0 / rjs * r6
-      do i = 1, n_in_buffer
-        k = i_buffer(i)
-        if( rjs(k) <= rcut_inner + buffer_inner )then
-          rbuf = -(rjs(k)-rcut_inner-buffer_inner)/buffer_inner
-          r6_der(k) = r6_der(k) + 6.d0 * r6(k) / (-buffer_inner) * (-rbuf + rbuf**2)
-        else
-          rbuf = (rjs(k)-rcut+buffer)/buffer
-          r6_der(k) = r6_der(k) + 6.d0 * r6(k) / buffer * (-rbuf + rbuf**2)
-        end if
-      end do
-    end if
-!   Now we do these terms
-    do i = 1, n_in_buffer
-      k = i_buffer(i)
-      if( rjs(k) <= rcut_inner + buffer_inner )then
-        rbuf = (rjs(k)-rcut_inner-buffer_inner)/(-buffer_inner)
-      else
-        rbuf = (rjs(k)-rcut+buffer)/buffer
-      end if
-      r6(k) = r6(k) * ( 1.d0 - 3.d0*rbuf**2 + 2.d0*rbuf**3 )
-    end do
-
-    if( do_timing) then
-      call cpu_time(time2)
-      write(*,*) "vdw: creating pair quantities 1:", time2-time1
-      call cpu_time(time1)
-    end if
-
-!   Precompute some other pair quantities
-    neighbor_c6_ii = neighbor_c6_ii * hirshfeld_v_neigh**2
-!   This is slow, could replace by Taylor expansion maybe
-    r0_ii = r0_ii * hirshfeld_v_neigh**(1.d0/3.d0)
-    neighbor_alpha0 = neighbor_alpha0 * hirshfeld_v_neigh
-
-    if( do_timing) then
-      call cpu_time(time2)
-      write(*,*) "vdw: creating pair quantities 2:", time2-time1
-      call cpu_time(time1)
-    end if
-
-! !   Computing pair parameters
-!     k = 0
-!     do i = 1, n_sites
-!       k = k + 1
-!       c6_ii = neighbor_c6_ii(k)
-!       r0_i = r0_ii(k)
-!       alpha0_i = neighbor_alpha0(k)
-! !     We don't really need these ones but whatever
-!       neighbor_c6_ij(k) = c6_ii
-!       r0_ij(k) = r0_i
-!       do j = 2, n_neigh(i)
-!         k = k + 1
-!         c6_jj = neighbor_c6_ii(k)
-!         alpha0_j = neighbor_alpha0(k)
-!         if( c6_ii == 0.d0 .or. c6_jj == 0.d0 )then
-!           neighbor_c6_ij(k) = 0.d0
-!         else
-!           neighbor_c6_ij(k) = (2.d0 * c6_ii * c6_jj) / (alpha0_j/alpha0_i * c6_ii + alpha0_i/alpha0_j * c6_jj)
-!         end if
-!         r0_j = r0_ii(k)
-!         r0_ij(k) = r0_i + r0_j
-!       end do
-!     end do
-
-    if( do_timing) then
-      call cpu_time(time2)
-      write(*,*) "vdw: creating pair quantities 3:", time2-time1
-      call cpu_time(time1)
-    end if
 
 !   Compute the TS local energies
     
@@ -223,29 +124,25 @@ module vdw
     st_exp_damp=sizeof(exp_damp)
     st_f_damp=sizeof(f_damp)
     st_r0_ij=sizeof(r0_ij)
-    st_rjs=sizeof(rjs)
     st_neighbor_c6_ij=sizeof(neighbor_c6_ij)
-    st_r6=sizeof(r6)
 
     call gpu_malloc_all(energies_d, st_energies, gpu_stream )
     call gpu_malloc_all(exp_damp_d, st_exp_damp, gpu_stream )
     call gpu_malloc_all(f_damp_d, st_f_damp, gpu_stream )
     call gpu_malloc_all(r0_ij_d, st_r0_ij, gpu_stream )
-    call gpu_malloc_all(rjs_d, st_rjs, gpu_stream )
-    call gpu_malloc_all(r6_d, st_r6, gpu_stream )
     call gpu_malloc_all(neighbor_c6_ij_d, st_neighbor_c6_ij, gpu_stream )
 
     
     
-    call cpy_htod(c_loc(exp_damp),exp_damp_d, st_exp_damp, gpu_stream )
-    call cpy_htod(c_loc(f_damp),f_damp_d, st_f_damp, gpu_stream )
+    ! call cpy_htod(c_loc(exp_damp),exp_damp_d, st_exp_damp, gpu_stream )
+    ! call cpy_htod(c_loc(f_damp),f_damp_d, st_f_damp, gpu_stream )
     call gpu_memset_async(f_damp_d,valuetoset, st_f_damp, gpu_stream )
     call gpu_memset_async(exp_damp_d,valuetoset, st_exp_damp, gpu_stream )
     call gpu_memset_async(energies_d,valuetoset, st_energies, gpu_stream )
-    call cpy_htod(c_loc(r0_ij),r0_ij_d, st_r0_ij, gpu_stream )
-    call cpy_htod(c_loc(rjs),rjs_d, st_rjs, gpu_stream )
-    call cpy_htod(c_loc(neighbor_c6_ij), neighbor_c6_ij_d, st_neighbor_c6_ij, gpu_stream )
-    call cpy_htod(c_loc(r6), r6_d, st_r6, gpu_stream )
+    ! call cpy_htod(c_loc(r0_ij),r0_ij_d, st_r0_ij, gpu_stream )
+    ! call cpy_htod(c_loc(neighbor_c6_ij), neighbor_c6_ij_d, st_neighbor_c6_ij, gpu_stream )
+
+    
 
     allocate(k_start_index(n_sites))
     k=0  
@@ -263,6 +160,123 @@ module vdw
       
     call gpu_malloc_all(n_neigh_d, st_i2_k_index, gpu_stream)
     call cpy_htod(c_loc(n_neigh),n_neigh_d, st_i2_k_index, gpu_stream)
+
+    st_hirshfeld_v_neigh=sizeof(hirshfeld_v_neigh)
+    call gpu_malloc_all(hirshfeld_v_neigh_d,st_hirshfeld_v_neigh,gpu_stream)
+    call cpy_htod(c_loc(hirshfeld_v_neigh),hirshfeld_v_neigh_d,st_hirshfeld_v_neigh,gpu_stream)
+
+
+!   Check which atoms are in the buffer region
+    ! do k = 1, n_pairs
+    !   j = neighbor_species(k)
+    !   neighbor_c6_ii(k) = c6_ref(j)
+    !   r0_ii(k) = r0_ref(j)
+    !   neighbor_alpha0(k) = alpha0_ref(j)
+    ! end do
+     
+    st_neighbor_species=sizeof(neighbor_species)
+    call gpu_malloc_all(neighbor_species_d,st_neighbor_species,gpu_stream)
+    call cpy_htod(c_loc(neighbor_species),neighbor_species_d,st_neighbor_species,gpu_stream)
+
+    st_c6_ref=sizeof(c6_ref)
+    call gpu_malloc_all(c6_ref_d,st_c6_ref,gpu_stream)
+    call cpy_htod(c_loc(c6_ref),c6_ref_d,st_c6_ref,gpu_stream)
+
+    st_r0_ref=sizeof(r0_ref)
+    call gpu_malloc_all(r0_ref_d,st_r0_ref,gpu_stream)
+    call cpy_htod(c_loc(r0_ref),r0_ref_d,st_r0_ref,gpu_stream)
+
+    st_alpha0_ref=sizeof(alpha0_ref)
+    call gpu_malloc_all(alpha0_ref_d,st_alpha0_ref,gpu_stream)
+    call cpy_htod(c_loc(alpha0_ref),alpha0_ref_d,st_r0_ref,gpu_stream)
+
+    
+    st_neighbor_alpha0=sizeof(neighbor_alpha0)
+    call gpu_malloc_all(neighbor_alpha0_d,st_neighbor_alpha0,gpu_stream)
+    !call cpy_htod(c_loc(neighbor_alpha0),neighbor_alpha0_d,st_neighbor_alpha0,gpu_stream)
+
+    st_neighbor_c6_ii=sizeof(neighbor_c6_ii)
+    call gpu_malloc_all(neighbor_c6_ii_d,st_neighbor_c6_ii,gpu_stream)
+    !call cpy_htod(c_loc(neighbor_c6_ii),neighbor_c6_ii_d,st_neighbor_c6_ii,gpu_stream)
+    
+    st_r0_ii=sizeof(r0_ii)
+    call gpu_malloc_all(r0_ii_d, st_r0_ii, gpu_stream)
+    !call cpy_htod(c_loc(r0_ii),r0_ii_d,st_r0_ii,gpu_stream)
+    
+    call gpu_init_pair_refs(neighbor_c6_ii_d, r0_ii_d, neighbor_alpha0_d, &
+                                c6_ref_d, r0_ref_d, alpha0_ref_d, &
+                                neighbor_species_d, &
+                                n_pairs, &
+                                gpu_stream)
+
+    n_in_buffer = 0
+    if( buffer > 0.d0 .or. buffer_inner > 0.d0 )then
+      do k = 1, n_pairs
+        if( (rjs(k) > rcut-buffer .and. rjs(k) < rcut) .or. &
+            (rjs(k) < rcut_inner+buffer_inner .and. rjs(k) > rcut_inner) )then
+          n_in_buffer = n_in_buffer + 1
+          is_in_buffer(k) = .true.
+        end if
+      end do
+    end if
+    
+    allocate( i_buffer(1:n_in_buffer) )
+    if( buffer > 0.d0 .or. buffer_inner > 0.d0 )then
+      i = 0
+      do k = 1, n_pairs
+        if( is_in_buffer(k) )then
+          i = i + 1
+          i_buffer(i) = k
+        end if
+      end do
+    end if
+
+    st_i_buffer=sizeof(i_buffer)
+    call gpu_malloc_all(i_buffer_d,st_i_buffer,gpu_stream)
+    call cpy_htod(c_loc(i_buffer),i_buffer_d,st_i_buffer,gpu_stream)
+
+    
+    
+    st_rjs=sizeof(rjs)
+    call gpu_malloc_all(rjs_d, st_rjs, gpu_stream )
+    call cpy_htod(c_loc(rjs),rjs_d, st_rjs, gpu_stream )
+
+!   Precompute r6 = 1/r^6 * cutoff(r) and its derivative
+
+    st_r6=sizeof(r6)
+    call gpu_malloc_all(r6_d, st_r6, gpu_stream )
+    ! call cpy_htod(c_loc(r6), r6_d, st_r6, gpu_stream )
+
+    call gpu_compute_r6(r6_d, rjs_d, n_pairs, gpu_stream)
+
+!   We do the forces first, so that we have not modified r6 yet
+    if( do_forces )then
+      
+      st_r6_der=sizeof(r6_der)
+      call gpu_malloc_all(r6_der_d, st_r6_der, gpu_stream )
+      call gpu_memset_async(r6_der_d, valuetoset,st_r6_der,gpu_stream)
+      !call cpy_htod(c_loc(r6_der), r6_der_d, st_r6_der, gpu_stream )
+
+      call gpu_compute_r6_der(r6_der_d, r6_d, rjs_d, i_buffer_d, &
+                              n_pairs, n_in_buffer, &
+                              rcut_inner, buffer_inner, rcut, buffer, &
+                              gpu_stream)
+    end if
+
+    call gpu_apply_buffer_scaling(r6_d, rjs_d, i_buffer_d, &
+                                          n_in_buffer, &
+                                          rcut_inner, buffer_inner,rcut, buffer, &
+                                          gpu_stream)
+
+    call gpu_apply_hirshfeld_scaling(neighbor_c6_ii_d, r0_ii_d, &
+                                    neighbor_alpha0_d, hirshfeld_v_neigh_d, &
+                                    n_pairs, gpu_stream)
+    
+    call gpu_compute_pair_params(neighbor_c6_ii_d, r0_ii_d, neighbor_alpha0_d, &
+                                 neighbor_c6_ij_d, r0_ij_d, &
+                                 n_neigh_d, k_start_index_d, &
+                                 n_sites, & 
+                                 gpu_stream )
 
     call gpu_compute_damp_energy(energies_d, f_damp_d, exp_damp_d, &
                                  rjs_d, r0_ij_d, r6_d, neighbor_c6_ij_d, &
@@ -283,17 +297,16 @@ module vdw
       st_pref_force2=sizeof(pref_force2)
       st_hirshfeld_v_cart_der=sizeof( hirshfeld_v_cart_der)
       st_xyz=sizeof(xyz)
-      st_r6_der=sizeof(r6_der)
       st_forces0=sizeof(forces0)
       st_virial=sizeof(virial)
       st_hirshfeld_v=sizeof(hirshfeld_v)
       st_r0_ref=sizeof(r0_ref)
 
+
       call gpu_malloc_all(pref_force1_d, st_pref_force1, gpu_stream )
       call gpu_malloc_all(pref_force2_d, st_pref_force2, gpu_stream )
       call gpu_malloc_all(hirshfeld_v_cart_der_d, st_hirshfeld_v_cart_der, gpu_stream )
       call gpu_malloc_all(xyz_d, st_xyz, gpu_stream )
-      call gpu_malloc_all(r6_der_d, st_r6_der, gpu_stream )
       call gpu_malloc_all(forces0_d, st_forces0, gpu_stream )
       call gpu_malloc_all(virial_d, st_virial, gpu_stream )
       call gpu_malloc_all(hirshfeld_v_d,st_hirshfeld_v,gpu_stream)
@@ -301,7 +314,6 @@ module vdw
 
       call cpy_htod(c_loc(hirshfeld_v_cart_der),hirshfeld_v_cart_der_d, st_hirshfeld_v_cart_der, gpu_stream )
       call cpy_htod(c_loc(xyz),xyz_d, st_xyz, gpu_stream )
-      call cpy_htod(c_loc(r6_der), r6_der_d, st_r6_der, gpu_stream )
       !call cpy_htod(c_loc(forces0), forces0_d, st_forces0, gpu_stream )
       !call cpy_htod(c_loc(virial), virial_d, st_virial, gpu_stream )
       call cpy_htod(c_loc(hirshfeld_v),hirshfeld_v_d,st_hirshfeld_v,gpu_stream)

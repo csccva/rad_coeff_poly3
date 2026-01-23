@@ -119,29 +119,119 @@ MODULE F_B_C
         type(c_ptr) :: gpu_stream
       end subroutine
 
-      subroutine gpu_compute_pair_params( &
-        neighbor_c6_ii_d, r0_ii_d, neighbor_alpha0_d, &
-        neighbor_c6_ij_d, r0_ij_d, &
-        n_neigh_d, k_start_index_d, &
-        n_sites, gpu_stream ) &
-        bind(C,name="gpu_compute_pair_params")
+      subroutine gpu_compute_pair_params(neighbor_c6_ii_d, r0_ii_d, neighbor_alpha0_d, &
+                                         neighbor_c6_ij_d, r0_ij_d, &
+                                         n_neigh_d, k_start_index_d, &
+                                         n_sites, & 
+                                         gpu_stream ) &
+                                         bind(C,name="gpu_compute_pair_params")
 
-  use iso_c_binding
-  implicit none
+      use iso_c_binding
+      implicit none
+        integer(c_int), value :: n_sites
+        type(c_ptr), value :: neighbor_c6_ii_d
+        type(c_ptr), value :: r0_ii_d
+        type(c_ptr), value :: neighbor_alpha0_d
+        type(c_ptr), value :: neighbor_c6_ij_d
+        type(c_ptr), value :: r0_ij_d
+        type(c_ptr), value :: n_neigh_d
+        type(c_ptr), value :: k_start_index_d
+        type(c_ptr) :: gpu_stream
 
-  integer(c_int), value :: n_sites
+      end subroutine
+      
+      subroutine gpu_apply_hirshfeld_scaling(neighbor_c6_ii_d, r0_ii_d, &
+                                        neighbor_alpha0_d, hirshfeld_v_neigh_d, &
+                                        n_pairs, gpu_stream) &
+                                        bind(C, name="gpu_apply_hirshfeld_scaling")
+        use iso_c_binding
+        implicit none
+        type(c_ptr), value :: neighbor_c6_ii_d
+        type(c_ptr), value :: r0_ii_d
+        type(c_ptr), value :: neighbor_alpha0_d
+        type(c_ptr), value :: hirshfeld_v_neigh_d
+        integer(c_int), value :: n_pairs
+        type(c_ptr) :: gpu_stream
+      end subroutine
+      
+      subroutine gpu_apply_buffer_scaling(r6_d, rjs_d, i_buffer_d, &
+                                          n_in_buffer, &
+                                          rcut_inner, buffer_inner,rcut, buffer, &
+                                          gpu_stream) &
+                                          bind(C, name="gpu_apply_buffer_scaling")
+        use iso_c_binding
+        implicit none
 
-  type(c_ptr), value :: neighbor_c6_ii_d
-  type(c_ptr), value :: r0_ii_d
-  type(c_ptr), value :: neighbor_alpha0_d
-  type(c_ptr), value :: neighbor_c6_ij_d
-  type(c_ptr), value :: r0_ij_d
-  type(c_ptr), value :: n_neigh_d
-  type(c_ptr), value :: k_start_index_d
+        type(c_ptr), value :: r6_d
+        type(c_ptr), value :: rjs_d
+        type(c_ptr), value :: i_buffer_d
 
-  type(c_ptr) :: gpu_stream
+        integer(c_int), value :: n_in_buffer
 
-end subroutine
+        real(c_double), value :: rcut_inner
+        real(c_double), value :: buffer_inner
+        real(c_double), value :: rcut
+        real(c_double), value :: buffer
+
+        type(c_ptr) :: gpu_stream
+      end subroutine
+      
+      subroutine gpu_compute_r6_der(r6_der_d, r6_d, rjs_d, i_buffer_d, &
+                                    n_pairs, n_in_buffer, &
+                                    rcut_inner, buffer_inner, rcut, buffer, &
+                                    gpu_stream) &
+                                    bind(C, name="gpu_compute_r6_der")
+        use iso_c_binding
+        implicit none
+
+        type(c_ptr), value :: r6_der_d
+        type(c_ptr), value :: r6_d
+        type(c_ptr), value :: rjs_d
+        type(c_ptr), value :: i_buffer_d
+
+        integer(c_int), value :: n_pairs
+        integer(c_int), value :: n_in_buffer
+
+        real(c_double), value :: rcut_inner
+        real(c_double), value :: buffer_inner
+        real(c_double), value :: rcut
+        real(c_double), value :: buffer
+        type(c_ptr) :: gpu_stream
+      end subroutine
+      
+      subroutine gpu_compute_r6(r6_d, rjs_d, n_pairs, gpu_stream) &
+                            bind(C, name="gpu_compute_r6")
+        use iso_c_binding
+        implicit none
+
+        type(c_ptr), value :: r6_d
+        type(c_ptr), value :: rjs_d
+
+        integer(c_int), value :: n_pairs
+
+        type(c_ptr) :: gpu_stream
+        end subroutine
+
+        subroutine gpu_init_pair_refs(neighbor_c6_ii_d, r0_ii_d, neighbor_alpha0_d, &
+                                c6_ref_d, r0_ref_d, alpha0_ref_d, &
+                                neighbor_species_d, &
+                                n_pairs, &
+                                gpu_stream) &
+                                bind(C, name="gpu_init_pair_refs")
+          use iso_c_binding
+          implicit none
+          
+          type(c_ptr), value :: neighbor_c6_ii_d
+          type(c_ptr), value :: r0_ii_d
+          type(c_ptr), value :: neighbor_alpha0_d
+          type(c_ptr), value :: c6_ref_d
+          type(c_ptr), value :: r0_ref_d
+          type(c_ptr), value :: alpha0_ref_d
+          type(c_ptr), value :: neighbor_species_d
+
+          integer(c_int), value :: n_pairs
+          type(c_ptr) :: gpu_stream
+        end subroutine
 
 
     END INTERFACE

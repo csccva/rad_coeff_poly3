@@ -320,24 +320,19 @@ __global__ void cuda_compute_pair_params(double *neighbor_c6_ii_d, double *r0_ii
 
     int k_start    = k_start_index_d[i_site];
     int my_n_neigh = n_neigh_d[i_site];
+    double c6_ii     = neighbor_c6_ii_d[k_start];
+    double r0_i      = r0_ii_d[k_start];
+    double alpha0_i  = neighbor_alpha0_d[k_start];
 
     for (int j = tid ; j < my_n_neigh; j += blockDim.x) {
-        if(j==0){
-         double c6_ii     = neighbor_c6_ii_d[k_start];
-         double r0_i      = r0_ii_d[k_start];
-         double alpha0_i  = neighbor_alpha0_d[k_start];
 
+        if(j==0){
          neighbor_c6_ij_d[k_start] = c6_ii;
          r0_ij_d[k_start]          = r0_i;
          r0_ij_d[k_start] = r0_i;
         }
         else{
          int k = k_start + j;
-
-         double c6_ii     = neighbor_c6_ii_d[k_start];
-         double r0_i      = r0_ii_d[k_start];
-         double alpha0_i  = neighbor_alpha0_d[k_start];
-
 
          double c6_jj     = neighbor_c6_ii_d[k];
          double alpha0_j  = neighbor_alpha0_d[k];
@@ -357,26 +352,189 @@ __global__ void cuda_compute_pair_params(double *neighbor_c6_ii_d, double *r0_ii
     }
 }
 
-extern "C"
-void gpu_compute_pair_params(
-    double *neighbor_c6_ii_d,
-    double *r0_ii_d,
-    double *neighbor_alpha0_d,
-    double *neighbor_c6_ij_d,
-    double *r0_ij_d,
-    int *n_neigh_d,
-    int *k_start_index_d,
-    int n_sites,
-    hipStream_t *stream)
+extern "C" void gpu_compute_pair_params(double *neighbor_c6_ii_d,double *r0_ii_d,double *neighbor_alpha0_d,
+                                       double *neighbor_c6_ij_d,double *r0_ij_d,
+                                       int *n_neigh_d,
+                                       int *k_start_index_d,
+                                       int n_sites,
+                                       hipStream_t *stream)
 {
-    cuda_compute_pair_params<<<n_sites, tpb_pref_force, 0, stream[0]>>>(
-        neighbor_c6_ii_d,
-        r0_ii_d,
-        neighbor_alpha0_d,
-        neighbor_c6_ij_d,
-        r0_ij_d,
-        n_neigh_d,
-        k_start_index_d,
-        n_sites);
+   cuda_compute_pair_params<<<n_sites, tpb_pref_force, 0, stream[0]>>>(neighbor_c6_ii_d,r0_ii_d,
+                                                                       neighbor_alpha0_d, neighbor_c6_ij_d,r0_ij_d,
+                                                                       n_neigh_d, k_start_index_d,
+                                                                       n_sites);
 }
 
+__global__ void cuda_apply_hirshfeld_scaling(double *neighbor_c6_ii_d, double *r0_ii_d, double *neighbor_alpha0_d,
+                                             const double *hirshfeld_v_neigh_d,
+                                             int n_pairs)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < n_pairs) {
+        double lochvn = hirshfeld_v_neigh_d[idx];
+
+        neighbor_c6_ii_d[idx]  *= lochvn * lochvn;
+        r0_ii_d[idx]           *= pow(lochvn,1.0/3.0); //cbrt(v);
+        neighbor_alpha0_d[idx] *= lochvn;
+    }
+}
+
+extern "C" void gpu_apply_hirshfeld_scaling(double *neighbor_c6_ii_d,double *r0_ii_d,double *neighbor_alpha0_d,
+                                            double *hirshfeld_v_neigh_d,
+                                            int n_pairs,
+                                            hipStream_t *stream)
+{
+    int threads = tpb;
+    int blocks  = (n_pairs + threads - 1) / threads;
+
+    cuda_apply_hirshfeld_scaling<<<blocks, threads, 0, stream[0]>>>(neighbor_c6_ii_d, r0_ii_d, neighbor_alpha0_d,
+                                                                    hirshfeld_v_neigh_d,
+                                                                    n_pairs);
+}
+
+__global__ void cuda_apply_buffer_scaling(double *r6_d, const double *rjs_d,const int *i_buffer_d,
+                                          int n_in_buffer,
+                                          double rcut_inner, double buffer_inner,double rcut, double buffer)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < n_in_buffer) {
+        int k = i_buffer_d[idx] - 1;  
+
+        double rbuf;
+        double r = rjs_d[k];
+
+        if (r <= rcut_inner + buffer_inner) {
+            rbuf = (r - rcut_inner - buffer_inner) / (-buffer_inner);
+        } else {
+            rbuf = (r - rcut + buffer) / buffer;
+        }
+
+        double s = 1.0 - 3.0 * rbuf * rbuf + 2.0 * rbuf * rbuf * rbuf;
+        r6_d[k] *= s;
+    }
+}
+
+extern "C" void gpu_apply_buffer_scaling(double *r6_d, double *rjs_d, int *i_buffer_d,
+                                         int n_in_buffer,
+                                         double rcut_inner, double buffer_inner,  double rcut,double buffer,
+                                         hipStream_t *stream)
+{
+    int threads = tpb;
+    int blocks  = (n_in_buffer + threads - 1) / threads;
+
+    cuda_apply_buffer_scaling<<<blocks, threads, 0, stream[0]>>>(r6_d, rjs_d, i_buffer_d,
+                                                                 n_in_buffer,
+                                                                 rcut_inner,buffer_inner,rcut,buffer);
+}
+
+__global__ void cuda_init_r6_der(double *r6_der_d, double *r6_d, double *rjs_d,
+                                 int n_pairs)
+{
+    int k = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (k < n_pairs) {
+        r6_der_d[k] = -6.0 * r6_d[k] / rjs_d[k];
+    }
+}
+
+__global__ void cuda_apply_buffer_r6_der(double *r6_der_d, double *r6_d,double *rjs_d,
+                                         int *i_buffer_d,
+                                         int n_in_buffer,
+                                         double rcut_inner,double buffer_inner,double rcut,double buffer)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < n_in_buffer) {
+        int k = i_buffer_d[idx] - 1; 
+
+        double r = rjs_d[k];
+        double rbuf, corr;
+
+        if (r <= rcut_inner + buffer_inner) {
+            rbuf = -(r - rcut_inner - buffer_inner) / buffer_inner;
+            corr = 6.0 * r6_d[k] / (-buffer_inner) * (-rbuf + rbuf * rbuf);
+        } else {
+            rbuf = (r - rcut + buffer) / buffer;
+            corr = 6.0 * r6_d[k] / buffer * (-rbuf + rbuf * rbuf);
+        }
+
+        r6_der_d[k] += corr;
+    }
+}
+
+extern "C" void gpu_compute_r6_der(double *r6_der_d, double *r6_d,double *rjs_d,
+                                   int *i_buffer_d,
+                                   int n_pairs, int n_in_buffer,
+                                   double rcut_inner,double buffer_inner,double rcut,double buffer,
+                                   hipStream_t *stream)
+{
+    int threads = tpb;
+
+    int blocks_pairs  = (n_pairs + threads - 1) / threads;
+    int blocks_buffer = (n_in_buffer + threads - 1) / threads;
+
+    cuda_init_r6_der<<<blocks_pairs, threads, 0, stream[0]>>>(r6_der_d, r6_d, rjs_d, n_pairs);
+
+    cuda_apply_buffer_r6_der<<<blocks_buffer, threads, 0, stream[0]>>>(r6_der_d, r6_d, rjs_d, 
+                                                                       i_buffer_d, 
+                                                                       n_in_buffer,
+                                                                       rcut_inner, buffer_inner, rcut, buffer);
+}
+
+__global__ void cuda_compute_r6(double *r6_d, const double *rjs_d,
+                                int n_pairs)
+{
+    int k = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (k < n_pairs) {
+        double r = rjs_d[k];
+        double r2 = r * r;
+        double r6 = r2 * r2 * r2;   // r^6
+        r6_d[k] = 1.0 / r6;
+    }
+}
+extern "C"
+void gpu_compute_r6(double *r6_d, double *rjs_d,
+                    int n_pairs,
+                    hipStream_t *stream)
+{
+    int threads = tpb;
+    int blocks  = (n_pairs + threads - 1) / threads;
+
+    cuda_compute_r6<<<blocks, threads, 0, stream[0]>>>(r6_d, rjs_d, n_pairs);
+}
+
+
+__global__ void cuda_init_pair_refs(double *neighbor_c6_ii_d, double *r0_ii_d,double *neighbor_alpha0_d,
+                                    const double *c6_ref_d, const double *r0_ref_d,const double *alpha0_ref_d,
+                                    const int *neighbor_species_d,
+                                    int n_pairs)
+{
+    int k = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (k < n_pairs) {
+        int j = neighbor_species_d[k] - 1;  
+
+        neighbor_c6_ii_d[k]   = c6_ref_d[j];
+        r0_ii_d[k]            = r0_ref_d[j];
+        neighbor_alpha0_d[k]  = alpha0_ref_d[j];
+    }
+}
+
+extern "C"
+void gpu_init_pair_refs(double *neighbor_c6_ii_d, double *r0_ii_d, double *neighbor_alpha0_d,
+                        double *c6_ref_d, double *r0_ref_d, double *alpha0_ref_d,
+                        int *neighbor_species_d,
+                        int n_pairs,
+                        hipStream_t *stream)
+{
+    int threads = tpb;
+    int blocks  = (n_pairs + threads - 1) / threads;
+
+    cuda_init_pair_refs<<<blocks, threads, 0, stream[0]>>>(neighbor_c6_ii_d, r0_ii_d, neighbor_alpha0_d,
+                                                           c6_ref_d, r0_ref_d, alpha0_ref_d,
+                                                           neighbor_species_d, 
+                                                           n_pairs);
+}
