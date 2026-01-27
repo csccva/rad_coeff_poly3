@@ -290,7 +290,7 @@ subroutine get_ts_energy_and_forces_gpu( hirshfeld_v, hirshfeld_v_cart_der, &
         enddo
       end do
 
-      k = 0.0
+      k = 0
       do i = 1, n_sites
         i2 = modulo(neighbors_list(k+1)-1, n_sites0) + 1
         do j = 1, n_neigh(i)

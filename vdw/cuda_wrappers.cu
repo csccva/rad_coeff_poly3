@@ -340,7 +340,6 @@ __global__ void cuda_compute_pair_params(double *neighbor_c6_ii_d, double *r0_ii
         if(j==0){
          neighbor_c6_ij_d[k_start] = c6_ii;
          r0_ij_d[k_start]          = r0_i;
-         r0_ij_d[k_start] = r0_i;
         }
         else{
          int k = k_start + j;
