@@ -341,7 +341,6 @@ subroutine get_ts_energy_and_forces_gpu( hirshfeld_v, hirshfeld_v_cart_der, &
       call gpu_free_async(r6_der_d, gpu_stream )
       call gpu_free_async(hirshfeld_v_d,gpu_stream)
       call gpu_free_async(i2_k_index_d, gpu_stream)
-      call gpu_free_async(r0_ref_d, gpu_stream)
 
       call cpy_dtoh(forces0_d, c_loc(forces0), st_forces0, gpu_stream )
       call gpu_free_async(forces0_d, gpu_stream )
@@ -371,6 +370,7 @@ subroutine get_ts_energy_and_forces_gpu( hirshfeld_v, hirshfeld_v_cart_der, &
     call gpu_free_async(neighbor_species_d, gpu_stream)
     call gpu_free_async(c6_ref_d, gpu_stream)
     call gpu_free_async(alpha0_ref_d, gpu_stream)
+    call gpu_free_async(r0_ref_d, gpu_stream)
     call gpu_free_async(neighbor_alpha0_d, gpu_stream)
     call gpu_free_async(neighbor_c6_ii_d, gpu_stream)
     call gpu_free_async(r0_ii_d, gpu_stream)
