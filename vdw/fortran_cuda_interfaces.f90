@@ -12,6 +12,12 @@ MODULE F_B_C
         type(c_ptr) :: cubhandle, gpu_stream
       end subroutine
 
+      subroutine destroy_cublas_handle(cubhandle, gpu_stream)bind(C,name="destroy_cublas_handle")
+        use iso_c_binding
+        implicit none
+        type(c_ptr) :: cubhandle,gpu_stream
+      end subroutine
+
       subroutine cpy_htod(a,a_d,n, gpu_stream) bind(C,name="cuda_cpy_htod")
         use iso_c_binding
         implicit none

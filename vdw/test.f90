@@ -17,6 +17,7 @@ program turbotest
   integer :: n_v_neigh_vdw, n_rjs, n_xyz, n_energies, n_forces
   integer :: itmp, jtmp, i,j
   real*8 :: lptmp, lpcdtmpx,lpcdtmpy,lpcdtmpz
+  integer :: ccc
   
   call init_problem()
 
@@ -53,8 +54,9 @@ program turbotest
   write(47,*) this_virial_vdw(2,1),this_virial_vdw(2,2),this_virial_vdw(2,3)
   write(47,*) this_virial_vdw(3,1),this_virial_vdw(3,2),this_virial_vdw(3,3)
   close (47)
-
-
+  
+  ccc=0
+  do 
   this_energies_vdw=0.0d0
   this_forces_vdw=0.0d0
   this_virial_vdw=0.0d0
@@ -92,8 +94,10 @@ program turbotest
   write(47,*) this_virial_vdw(2,1),this_virial_vdw(2,2),this_virial_vdw(2,3)
   write(47,*) this_virial_vdw(3,1),this_virial_vdw(3,2),this_virial_vdw(3,3)
   close (47)
-
-
+  ccc=ccc+1
+  write(*,*) "Call ",ccc
+  end do
+  
   contains
 
   subroutine init_problem()

@@ -50,6 +50,17 @@ extern "C" void create_cublas_handle(hipblasHandle_t *handle,hipStream_t *stream
    return;
 }
 
+
+
+extern "C" void destroy_cublas_handle(hipblasHandle_t *handle,hipStream_t *stream )
+{
+ 	 // Destroy the handle
+   hipblasDestroy(*handle);
+   hipStreamDestroy(*stream);
+   //printf("\n cublas handle destroyed. \n The End? \n");
+   return;
+}
+
 extern "C" void cuda_cpy_htod(void *a, void *a_d, size_t N, hipStream_t *stream )
 {
   gpuErrchk(hipMemcpyAsync(a_d, a, N, hipMemcpyHostToDevice,stream[0] ));
@@ -523,8 +534,7 @@ __global__ void cuda_init_pair_refs(double *neighbor_c6_ii_d, double *r0_ii_d,do
     }
 }
 
-extern "C"
-void gpu_init_pair_refs(double *neighbor_c6_ii_d, double *r0_ii_d, double *neighbor_alpha0_d,
+extern "C" void gpu_init_pair_refs(double *neighbor_c6_ii_d, double *r0_ii_d, double *neighbor_alpha0_d,
                         double *c6_ref_d, double *r0_ref_d, double *alpha0_ref_d,
                         int *neighbor_species_d,
                         int n_pairs,
