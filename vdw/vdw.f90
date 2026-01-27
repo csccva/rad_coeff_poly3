@@ -268,12 +268,12 @@ subroutine get_ts_energy_and_forces_gpu( hirshfeld_v, hirshfeld_v_cart_der, &
       call gpu_malloc_all(forces0_d, st_forces0, gpu_stream )
       call gpu_malloc_all(virial_d, st_virial, gpu_stream )
       call gpu_malloc_all(hirshfeld_v_d,st_hirshfeld_v,gpu_stream)
-      call gpu_malloc_all(r0_ref_d,st_r0_ref,gpu_stream)
+      !call gpu_malloc_all(r0_ref_d,st_r0_ref,gpu_stream)
 
       call cpy_htod(c_loc(hirshfeld_v_cart_der),hirshfeld_v_cart_der_d, st_hirshfeld_v_cart_der, gpu_stream )
       call cpy_htod(c_loc(xyz),xyz_d, st_xyz, gpu_stream )
       call cpy_htod(c_loc(hirshfeld_v),hirshfeld_v_d,st_hirshfeld_v,gpu_stream)
-      call cpy_htod(c_loc(r0_ref),r0_ref_d,st_r0_ref,gpu_stream)
+      !call cpy_htod(c_loc(r0_ref),r0_ref_d,st_r0_ref,gpu_stream)
 
       allocate(j2_index(1:n_pairs))
       allocate(i2_index(1:n_pairs))
