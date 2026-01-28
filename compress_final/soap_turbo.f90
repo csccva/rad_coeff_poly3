@@ -738,9 +738,9 @@ module soap_turbo_desc
     call gpu_malloc_all(soap_cart_der_d,st_size_soap_cart_der,gpu_stream)
 !    call cpy_htod(c_loc(soap_cart_der),soap_cart_der_d,st_size_soap_cart_der,gpu_stream)
 
-  ! call gpu_memset_async(soap_azi_der_d,valuetoset,st_size_soap_azi_der,gpu_stream)
-  ! call gpu_memset_async(soap_rad_der_d,valuetoset,st_size_soap_rad_der,gpu_stream)
-  ! call gpu_memset_async(soap_pol_der_d,valuetoset,st_size_soap_pol_der,gpu_stream)
+  call gpu_memset_async(soap_azi_der_d,valuetoset,st_size_soap_azi_der,gpu_stream)
+  call gpu_memset_async(soap_rad_der_d,valuetoset,st_size_soap_rad_der,gpu_stream)
+  call gpu_memset_async(soap_pol_der_d,valuetoset,st_size_soap_pol_der,gpu_stream)
 
   ! call gpu_memset_async(g_this_soap_azi_der_d,valuetoset,st_size_soap_azi_der,gpu_stream)
   ! call gpu_memset_async(g_this_soap_rad_der_d,valuetoset,st_size_soap_rad_der,gpu_stream)
@@ -759,18 +759,6 @@ module soap_turbo_desc
     st_size_n_neigh=sizeof(n_neigh)
     call gpu_malloc_all(n_neigh_d,st_size_n_neigh,gpu_stream)
     call cpy_htod(c_loc(n_neigh),n_neigh_d, st_size_n_neigh,gpu_stream)
-
-
-    write(*,*) 
-    ! write(*,*) n_sites, n_atom_pairs, n_soap, k_max, n_max, l_max, maxneigh
-    ! write(*,*) n_soap, size(soap_azi_der,1), size(soap_azi_der,2), compress_P_nonzero, n_soap_uncompressed
-
-    ! write(*,*) n_soap, comp_P_nz, compress_P_nonzero, size(compress_P_i,1),n_soap_uncompressed
-    ! write(*,*) n_soap, size(g_this_soap_azi_der,1), size(g_this_soap_azi_der,2), &
-    !            compress_P_nonzero, n_soap_uncompressed
-    ! write(*,*) size(skip_soap_component_flattened,1), n_soap_uncompressed, counter2, counter
-    write(*,*) 
-    !stop
     
     call gpu_get_soap_der(soap_d, sqrt_dot_p_d, soap_cart_der_d, &
           soap_rad_der_d, soap_azi_der_d, soap_pol_der_d, &
@@ -797,6 +785,9 @@ module soap_turbo_desc
     call gpu_free_async(soap_rad_der_d,gpu_stream)
     call gpu_free_async(soap_azi_der_d,gpu_stream)
     call gpu_free_async(soap_pol_der_d,gpu_stream)
+    call gpu_free_async(g_this_soap_rad_der_d,gpu_stream)
+    call gpu_free_async(g_this_soap_azi_der_d,gpu_stream)
+    call gpu_free_async(g_this_soap_pol_der_d,gpu_stream)
     call gpu_free_async(gdorpro_azi_d,gpu_stream)
     call gpu_free_async(gdorpro_pol_d,gpu_stream)
     call gpu_free_async(gdorpro_rad_d,gpu_stream)
@@ -806,16 +797,14 @@ module soap_turbo_desc
     call gpu_free_async(thetas_d,gpu_stream)
     call gpu_free_async(phis_d,gpu_stream)
     call gpu_free_async(rjs_d,gpu_stream)
-    !call gpu_free_async(multiplicity_array_d,gpu_stream)
-    !call gpu_free_async(cnk_d,gpu_stream)
-    !call gpu_free_async(cnk_rad_der_d,gpu_stream)
-    !call gpu_free_async(cnk_azi_der_d,gpu_stream)
-    !call gpu_free_async(cnk_pol_der_d,gpu_stream)
+    call gpu_free_async(cnk_rad_der_d,gpu_stream)
+    call gpu_free_async(cnk_azi_der_d,gpu_stream)
+    call gpu_free_async(cnk_pol_der_d,gpu_stream)
     call gpu_free_async(i_k2_start_d,gpu_stream)
     call gpu_free_async(k2_i_site_d,gpu_stream)
     call gpu_free_async(k2_start_d,gpu_stream)
     call gpu_free_async(k3_index_d,gpu_stream)
-    !call gpu_free_async(skip_soap_component_d,gpu_stream)
+    call gpu_free_async(n_neigh_d,gpu_stream)
 !****************************
 ! Uncomment for detailed timing check
 !
@@ -826,7 +815,6 @@ module soap_turbo_desc
 
   write(*,*) 
   write(*,*) "Before normalize soap_d."
-  !write(*,*) st_soap_d, st_sqrt_dot_p
   write(*,*) 
   call gpu_soap_normalize(soap_d, sqrt_dot_p_d, n_soap, n_sites, gpu_stream)
   call cpy_dtoh(soap_d,c_loc(soap),st_soap_d,gpu_stream)
@@ -835,6 +823,17 @@ module soap_turbo_desc
   call gpu_free_async(soap_cart_der_d,gpu_stream)
   call gpu_free_async(soap_d,gpu_stream)
   call gpu_free_async(sqrt_dot_p_d,gpu_stream)
+  call gpu_free_async(multiplicity_array_d,gpu_stream)
+  call gpu_free_async(cnk_d,gpu_stream)
+  call gpu_free_async(g_this_soap_d,gpu_stream)
+
+  call gpu_free_async(skip_soap_component_flattened_d,gpu_stream)
+  call gpu_free_async(compress_P_i_d, gpu_stream)
+  call gpu_free_async(compress_P_j_d,gpu_stream)
+  call gpu_free_async(compress_P_el_d,gpu_stream)
+  call gpu_device_sync()
+
+  call destroy_cublas_handle(cublas_handle, gpu_stream)
   call gpu_device_sync()
 
   write(*,*) 

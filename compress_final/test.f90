@@ -20,6 +20,7 @@ program test_compress
    real*8, allocatable :: soap(:,:), soap_cart_der(:,:,:)
    integer :: i,j,k
    integer :: i_site_one, i_site_der
+   integer :: ccc
 
    
    call allocate_all()
@@ -44,6 +45,10 @@ program test_compress
    close(5)
    
    call initialize()
+   ! ccc=0
+   ! do
+   soap=0.0
+   soap_cart_der=0.0
 
    call get_soap_gpu(n_sites, n_neigh, n_species, species, species_multiplicity, n_atom_pairs, mask, rjs, &
                           thetas, phis, alpha_max, l_max, rcut_hard, rcut_soft, nf, global_scaling, &
@@ -60,6 +65,9 @@ program test_compress
       enddo
    enddo
    close(5)
+   ! ccc=ccc+1
+   ! write(*,*) "Iteration ", ccc
+   ! enddo
 
    contains
 
