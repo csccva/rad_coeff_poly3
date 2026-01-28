@@ -2593,8 +2593,8 @@ extern "C" void gpu_device_synchronize(){
 
 
 
-#define WARP_SIZE 64 // 32 for cuda!!!!!!
-#define LOCAL_NN 1
+#define WARP_SIZE 32 // 64 for hip // 32 for cuda!!!!!!
+#define LOCAL_NN 2 // for HIP 1 was ok, for CUDA bigger is needed
 #define ALPHA_MAX 7
 #define MAXT 64
 #define MAXB 16
@@ -2656,8 +2656,8 @@ template <typename T>
 __device__ T warp_red(T data) {
     T res = data;
     for (int i = WARP_SIZE / 2; i != 0; i >>= 1) {
-      //res += __shfl_down_sync(0xffffffff, res, i, WARP_SIZE); // Updated for CUDA
-      res += __shfl_down(res, i, WARP_SIZE);
+      res += __shfl_down_sync(0xffffffff, res, i, WARP_SIZE); // Updated for CUDA
+      //res += __shfl_down(res, i, WARP_SIZE);
     }
     return res;
 }
@@ -3052,7 +3052,8 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
     // HIP: Use __shfl
     // CUDA Equivalent:
     // int broadcasted_nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0);
-  int nn = __shfl(warp_nn, 0);
+  //int nn = __shfl(warp_nn, 0);
+  int nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0);
     
   if(nn>LOCAL_NN*WARP_SIZE){
     printf(" \n Alert!!!! Alert!!! \n nn is bigger than LOCAL_NN*WARP_SIZE, LOCAL_NN! \n nn %d thread %d site %d\n", nn, (int)tid, i+1);
@@ -3426,9 +3427,9 @@ void g_aux_array_many(double *r, double *r0, double *width,double *poly_left, do
   int warp_nn= warp_red(local_nn); //int warp_nn= warp_red_int(local_nn);
     // Broadcast the computed warp_nn to all threads in the warp
     // HIP: Use __shfl
-    // CUDA Equivalent:
-    // int broadcasted_nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0);
-  int nn = __shfl(warp_nn, 0);
+    // CUDA Equivalent: //int broadcasted_nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0);
+  int nn = __shfl_sync(0xFFFFFFFF, warp_nn, 0); // for CUDA
+  //int nn = __shfl(warp_nn, 0); // for HIP
     
   if(nn>LOCAL_NN*WARP_SIZE){
     printf(" \n Alert!!!! Alert!!! \n nn is bigger than LOCAL_NN*WARP_SIZE, LOCAL_NN! \n nn %d thread %d site %d\n", nn, (int)tid, i+1);

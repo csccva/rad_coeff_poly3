@@ -402,14 +402,20 @@ MODULE F_B_C
       real(c_double), value :: yp1, ypn
       end subroutine
 
-      subroutine get_orthonormalization_matrix_poly3_gpu(alpha_max, S, W, handle, stream) bind(C,name="get_orthonormalization_matrix_poly3")
+      subroutine get_orthonormalization_matrix_poly3_gpu(alpha_max, &
+                                                         S, W, handle, &
+                                                         stream) &
+                                                         bind(C,name="get_orthonormalization_matrix_poly3")
         use iso_c_binding
         type(c_ptr), value :: S, W
         type(c_ptr)        :: handle, stream
         integer(c_int), value :: alpha_max
       end subroutine
 
-      subroutine get_orthonormalization_matrix_poly3gauss_gpu(alpha_max, atom_sigma_in, rcut_hard_in, S, W,handle,stream) bind(C,name="get_orthonormalization_matrix_poly3gauss")
+      subroutine get_orthonormalization_matrix_poly3gauss_gpu(alpha_max, atom_sigma_in, &
+                                                              rcut_hard_in, S, W,handle, & 
+                                                              stream) &
+                                                              bind(C,name="get_orthonormalization_matrix_poly3gauss")
         use iso_c_binding
         type(c_ptr), value :: S,W
         type(c_ptr)        :: handle, stream
@@ -417,21 +423,32 @@ MODULE F_B_C
         real(c_double), value :: atom_sigma_in, rcut_hard_in
       end subroutine
 
-      subroutine orthonormalization_copy_to_global_matrix(src, dest,src_rowsize, dest_start, dest_rowsize, stream) bind(C,name="copy_to_global_matrix")
+      subroutine orthonormalization_copy_to_global_matrix(src, dest, &
+                                                          src_rowsize, dest_start, dest_rowsize, &
+                                                          stream) &
+                                                          bind(C,name="copy_to_global_matrix")
         use iso_c_binding
         type(c_ptr), value :: src,dest
         type(c_ptr)        :: stream
         integer(c_int), value :: src_rowsize, dest_start, dest_rowsize
       end subroutine
 
-      subroutine gpu_3b(n_sparse, n_sites, n_atom_pairs, n_sites0, sp0, sp1, sp2, alpha, delta, e0, cutoff, stream, rjs, xyz, n_neigh, species, neighbors_list, neighbor_species, do_forces, rcut,buffer, sigma,qs,str,i_beg, i_end, energy_d, forces_d, virials_d, kappas_array_d) bind(C,name="gpu_3b")
+      subroutine gpu_3b(n_sparse, n_sites, n_atom_pairs, n_sites0, &
+                        sp0, sp1, sp2, alpha, delta, e0, cutoff, &
+                        stream, &
+                        rjs, xyz, n_neigh, species, & 
+                        neighbors_list, neighbor_species, &
+                        do_forces, rcut,buffer, sigma,qs,&
+                        str,i_beg, i_end, energy_d, forces_d, virials_d, kappas_array_d) &
+                        bind(C,name="gpu_3b")
         use iso_c_binding
         implicit none
         type(c_ptr),value :: alpha, cutoff
         type(c_ptr) :: stream
         integer(c_int),value :: n_sparse, n_sites, n_atom_pairs, n_sites0, sp0, sp1, sp2,i_beg,i_end
         real(c_double),value :: delta,e0, rcut,buffer
-        type(c_ptr),value :: rjs,xyz,n_neigh,species,neighbors_list,neighbor_species,sigma,qs,energy_d,forces_d,virials_d,kappas_array_d
+        type(c_ptr),value :: rjs,xyz,n_neigh,species,neighbors_list,neighbor_species,sigma
+        type(c_ptr),value :: qs,energy_d,forces_d,virials_d,kappas_array_d
         logical(c_bool), value :: do_forces
         character(kind=c_char), dimension(*) :: str
       end subroutine
@@ -444,16 +461,23 @@ MODULE F_B_C
         integer(c_int), value :: n_sites
       end subroutine
       
-      subroutine gpu_setup_3bresult_arrays(energy_3b_d, forces_3b_d, virials_3b_d,stream,do_forces, n_sites, n_sites0) bind(C,name="setup_3bresult_arrays_cwrap")
+      subroutine gpu_setup_3bresult_arrays(energy_3b_d, forces_3b_d, virials_3b_d, &
+                                           stream, &
+                                           do_forces, n_sites, n_sites0) & 
+                                           bind(C,name="setup_3bresult_arrays_cwrap")
         use iso_c_binding
         implicit none        
         type(c_ptr) :: energy_3b_d, forces_3b_d, virials_3b_d
         type(c_ptr) :: stream
         logical(c_bool), value :: do_forces
-	integer(c_int), value :: n_sites, n_sites0
+	      integer(c_int), value :: n_sites, n_sites0
       end subroutine
       
-      subroutine gpu_cleanup_3bresult_arrays(energy_3b_d, forces_3b_d, virials_3b_d,energy_3b_h,forces_3b_h,virials_3b_h,stream,do_forces, n_sites, n_sites0) bind(C,name="cleanup_3bresult_arrays_cwrap")
+      subroutine gpu_cleanup_3bresult_arrays(energy_3b_d, forces_3b_d, virials_3b_d, &
+                                             energy_3b_h,forces_3b_h,virials_3b_h, &
+                                             stream, &
+                                             do_forces, n_sites, n_sites0) &
+                                             bind(C,name="cleanup_3bresult_arrays_cwrap")
         use iso_c_binding
         implicit none        
         type(c_ptr) :: energy_3b_d, forces_3b_d, virials_3b_d,energy_3b_h,forces_3b_h,virials_3b_h
@@ -480,21 +504,27 @@ MODULE F_B_C
       end subroutine
 
       subroutine gpu_get_pair_distribution_nk(i_beg, i_end, n_pairs, n_sites0, neighbors_list_d,&
-        n_neigh_d, neighbor_species_d,&
-        species_d, rjs_d, xyz_d, r_min, r_max, r_cut,&
-        buffer, &
-        nk_out_d, nk_flags_d, nk_flags_sum_d, species_1, species_2, stream)  bind(C,name="gpu_get_pair_distribution_nk")
+                                              n_neigh_d, neighbor_species_d,&
+                                              species_d, rjs_d, xyz_d, r_min, r_max, r_cut,&
+                                              buffer, &
+                                              nk_out_d, nk_flags_d, nk_flags_sum_d, species_1, species_2, &
+                                              stream)  &
+                                              bind(C,name="gpu_get_pair_distribution_nk")
         use iso_c_binding
         implicit none
         integer(c_int), value ::  i_beg, i_end, n_sites0, species_1, species_2, n_pairs
-        type(c_ptr), value :: neighbors_list_d, n_neigh_d, neighbor_species_d, species_d, rjs_d, xyz_d, nk_flags_d, nk_flags_sum_d
+        type(c_ptr), value :: neighbors_list_d, n_neigh_d, neighbor_species_d, species_d
+        type(c_ptr), value :: rjs_d, xyz_d, nk_flags_d, nk_flags_sum_d
         real(c_double), value :: r_min, r_max, buffer, r_cut
         type(c_ptr), value ::  nk_out_d
         type(c_ptr) :: stream        
       end subroutine gpu_get_pair_distribution_nk
 
       subroutine gpu_set_pair_distribution_k_index(i_beg, i_end, n_pairs, n_sites0, neighbors_list_d,&
-           rjs_d, xyz_d, k_index_d, j2_index_d, rjs_index_d,  xyz_k_d, nk_flags_d,  nk_sum_flags_d, stream)  bind(C,name="gpu_set_pair_distribution_k_index")
+                                                   rjs_d, xyz_d, k_index_d, j2_index_d, rjs_index_d,  &
+                                                   xyz_k_d, nk_flags_d,  nk_sum_flags_d, &
+                                                   stream)  &
+                                                   bind(C,name="gpu_set_pair_distribution_k_index")
         use iso_c_binding
         implicit none
         integer(c_int), value ::  i_beg, i_end, n_sites0, n_pairs
@@ -505,7 +535,10 @@ MODULE F_B_C
 
 
       subroutine gpu_setup_matrix_forces(i_beg, i_end, n_pairs, n_sites0, neighbors_list_d,&
-           xyz_all_d, k_index_d, j2_index_d,  xyz_k_d, nk_flags_d, nk_flags_sum_d, stream)  bind(C,name="gpu_setup_matrix_forces")
+                                         xyz_all_d, k_index_d, j2_index_d,  & 
+                                         xyz_k_d, nk_flags_d, nk_flags_sum_d, &
+                                         stream)  & 
+                                         bind(C,name="gpu_setup_matrix_forces")
         use iso_c_binding
         implicit none
         integer(c_int), value ::  i_beg, i_end, n_sites0, n_pairs
@@ -516,7 +549,9 @@ MODULE F_B_C
 
       
       subroutine gpu_exp_force_virial_collection( n_k, forces0, energy_scale,  fi,&
-						 j2_list,  virial,  xyz, stream )bind(C,name="gpu_exp_force_virial_collection")
+						                                      j2_list,  virial,  xyz, & 
+                                                  stream ) &
+                                                  bind(C,name="gpu_exp_force_virial_collection")
 
         use iso_c_binding
         implicit none        
@@ -604,8 +639,10 @@ MODULE F_B_C
       end subroutine gpu_get_pair_distribution_only
 
       subroutine gpu_get_pair_distribution_only_falloc(pair_distribution_d, pdf_to_reduce,&
-           n_k, n_samples, kde_sigma,  x_d, dV_d, rjs_d, pdf_factor, der_factor, stream) bind(C&
-           &,name="gpu_get_pair_distribution_only_falloc")
+                                                      n_k, n_samples, kde_sigma,  x_d, dV_d, & 
+                                                      rjs_d, pdf_factor, der_factor, &
+                                                      stream) & 
+                                                      bind(C,name="gpu_get_pair_distribution_only_falloc")
         use iso_c_binding
         implicit none
         integer(c_int), value :: n_k, n_samples
@@ -629,7 +666,11 @@ MODULE F_B_C
       
       
 
-      subroutine gpu_set_Gk( nk, n_samples, k_index_d, Gk_d, pair_distribution_partial_der_d, c_factor, stream)bind(C,name="gpu_set_Gk")
+      subroutine gpu_set_Gk( nk, n_samples, k_index_d, &
+                             Gk_d, pair_distribution_partial_der_d, &
+                             c_factor, &
+                             stream) &
+                             bind(C,name="gpu_set_Gk")
         use iso_c_binding
         implicit none
         integer(c_int), value :: nk, n_samples
@@ -640,7 +681,9 @@ MODULE F_B_C
 
 
       
-      subroutine  gpu_set_pair_distribution_k_index_only(n_pairs, k_index_d, nk_sum_flags_d, stream )bind(C,name="gpu_set_pair_distribution_k_index_only")
+      subroutine  gpu_set_pair_distribution_k_index_only(n_pairs, k_index_d, nk_sum_flags_d, &
+                                                         stream ) &
+                                                         bind(C,name="gpu_set_pair_distribution_k_index_only")
         use iso_c_binding
         implicit none
         integer(c_int), value :: n_pairs
@@ -649,7 +692,10 @@ MODULE F_B_C
       end subroutine gpu_set_pair_distribution_k_index_only
       
 
-      subroutine  gpu_set_pair_distribution_j2_only(n_pairs, n_sites, neighbors_list_d, j2_d, nk_sum_flags_d, stream )bind(C,name="gpu_set_pair_distribution_j2_only")
+      subroutine  gpu_set_pair_distribution_j2_only(n_pairs, n_sites, neighbors_list_d, &
+                                                    j2_d, nk_sum_flags_d, &
+                                                    stream ) &
+                                                    bind(C,name="gpu_set_pair_distribution_j2_only")
         use iso_c_binding
         implicit none
         integer(c_int), value :: n_pairs, n_sites
@@ -659,7 +705,10 @@ MODULE F_B_C
 
 
 
-      subroutine  gpu_set_pair_distribution_rjs_only(n_pairs, rjs, rjs_d, nk_sum_flags_d, stream )bind(C,name="gpu_set_pair_distribution_rjs_only")
+      subroutine  gpu_set_pair_distribution_rjs_only(n_pairs, rjs, rjs_d, & 
+                                                     nk_sum_flags_d, &
+                                                     stream ) &
+                                                     bind(C,name="gpu_set_pair_distribution_rjs_only")
         use iso_c_binding
         implicit none
         integer(c_int), value :: n_pairs
@@ -668,7 +717,10 @@ MODULE F_B_C
       end subroutine gpu_set_pair_distribution_rjs_only
 
 
-      subroutine  gpu_set_pair_distribution_xyz_only(n_pairs, xyz, xyz_d, nk_sum_flags_d, stream )bind(C,name="gpu_set_pair_distribution_xyz_only")
+      subroutine  gpu_set_pair_distribution_xyz_only(n_pairs, xyz, xyz_d, & 
+                                                     nk_sum_flags_d, &
+                                                     stream ) &
+                                                     bind(C,name="gpu_set_pair_distribution_xyz_only")
         use iso_c_binding
         implicit none
         integer(c_int), value :: n_pairs

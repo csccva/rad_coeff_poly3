@@ -340,13 +340,17 @@ module soap_turbo_radial_op
             M_right_der_array(1:nn, j, 3) = I0_array(1:nn, j, 3) * g_aux_right_der_array(1:nn, j, 3) * vect(j)
           end do
 
-          I_left_der_array(1:nn, 1:alpha_max) = matmul( M_left_der_array(1:nn, 1:4, 2), transpose(A(1:alpha_max, 1:4)) ) * &
+          I_left_der_array(1:nn, 1:alpha_max) = matmul( M_left_der_array(1:nn, 1:4, 2), &
+                                                transpose(A(1:alpha_max, 1:4)))*&
                                                 I0_array(1:nn, 5:alpha_max + 4, 2) - &
-                                                matmul( M_left_der_array(1:nn, 1:4, 1), transpose(A(1:alpha_max, 1:4)) ) * &
+                                                matmul( M_left_der_array(1:nn, 1:4, 1), &
+                                                transpose(A(1:alpha_max, 1:4)))*&
                                                 I0_array(1:nn, 5:alpha_max + 4, 1)
-          I_right_der_array(1:nn, 1:alpha_max) = matmul( M_right_der_array(1:nn, 1:4, 3), transpose(A(1:alpha_max, 1:4)) ) * &
+          I_right_der_array(1:nn, 1:alpha_max) = matmul( M_right_der_array(1:nn, 1:4, 3), &
+                                                 transpose(A(1:alpha_max, 1:4)))*&
                                                  I0_array(1:nn, 5:alpha_max + 4, 3) - &
-                                                 matmul( M_right_der_array(1:nn, 1:4, 2), transpose(A(1:alpha_max, 1:4)) ) * &
+                                                 matmul( M_right_der_array(1:nn, 1:4, 2), &
+                                                 transpose(A(1:alpha_max, 1:4)) ) * &
                                                  I0_array(1:nn, 5:alpha_max + 4, 2)
           exp_coeff_soft_der_array = I_left_der_array + I_right_der_array
 
@@ -676,8 +680,10 @@ module soap_turbo_radial_op
 
 implicit none
 
-integer, intent(in) :: alpha_max, n_neigh(:), n_sites, radial_enhancement
-real(c_double), intent(in) :: rcut_soft_in, rcut_hard_in, rjs_in(:), atom_sigma_in, atom_sigma_scaling
+integer, intent(in) :: alpha_max, n_sites, radial_enhancement
+integer, intent(in), target :: n_neigh(:)
+real(c_double), intent(in) :: rcut_soft_in, rcut_hard_in, atom_sigma_in, atom_sigma_scaling
+real(c_double), intent(in), target ::  rjs_in(:)
 real(c_double), intent(in) :: amplitude_scaling, central_weight
 real*8 :: rcut_soft, rcut_hard, atom_sigma, atom_sigma_scaled, amplitude
 logical, intent(in) :: mask(:), do_derivatives, do_central
@@ -685,12 +691,12 @@ character(*), intent(in) :: scaling_mode
 !
 integer :: i, j, k
 real*8 :: pi, rj, s2, atom_width, atom_width_scaling, filter_width, x
-real*8, allocatable :: A(:,:)
-real*8 :: W(:,:)
+real*8, allocatable,target :: A(:,:)
+real*8,target :: W(:,:)
 !   derivatives
 real*8 :: amplitude_der, tmp_aw
 !   Results will be stored in exp_coeff, which is an array of dimension (alpha_max, n_atom_pairs)
-real*8 :: exp_coeff(:,:), exp_coeff_der(:,:)
+real*8,target :: exp_coeff(:,:), exp_coeff_der(:,:)
 logical, save :: print_basis = .false.
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -715,7 +721,7 @@ real*8 :: t1, t2
 integer(c_int) :: n_exp_coeff,n_exp_coeff_der, n_rjs_in
 integer(c_size_t) :: st_size_exp_coeff,st_size_exp_coeff_der,st_W,st_k_i, st_n_neigh
 integer(c_size_t) :: st_mask,st_rjs_in, st_A
-integer(c_int), allocatable :: k_i(:)
+integer(c_int), allocatable,target :: k_i(:)
 integer(c_int) :: num_scaling_mode
 type(c_ptr) :: exp_coeff_d, exp_coeff_der_d
 type(c_ptr) :: W_d,k_i_d, n_neigh_d, rjs_in_d
