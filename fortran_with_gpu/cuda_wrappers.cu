@@ -3841,7 +3841,7 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
   }
 
 
-  cuda_soft_newnew<<<n_sites, warp_size>>>(exp_coeff_d, exp_coeff_der_d,
+  cuda_soft_newnew<<<n_sites, warp_size,0, stream[0]>>>(exp_coeff_d, exp_coeff_der_d,
                                             rjs_in_d,mask_d,rcut_soft_in, 
                                             rcut_hard_in, atom_sigma_in, 
                                             atom_sigma_scaling, atom_sigma,n_neigh_d, 
@@ -3857,7 +3857,7 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
                                             // global_g_aux_left_array_d, global_g_aux_right_array_d,
                                             radial_enhancement);
 
-  cuda_buffer_newnew<<<n_sites, warp_size>>>(exp_coeff_d, exp_coeff_der_d,
+  cuda_buffer_newnew<<<n_sites, warp_size, 0,stream[0]>>>(exp_coeff_d, exp_coeff_der_d,
                                             rjs_in_d,mask_d,rcut_soft_in, 
                                             rcut_hard_in, atom_sigma_in, 
                                             atom_sigma_scaling, atom_sigma,n_neigh_d, 
@@ -3877,12 +3877,12 @@ extern "C" void gpu_radial_expansion_coefficients_poly3operator(double *exp_coef
   double *tmp_exp_coeff_d;
   gpuErrchk(hipMallocAsync((void**)&tmp_exp_coeff_d,sizeof(double)*n_exp_coeff,stream[0]));
 
-  //exp_w_matmul<<<nblocks,nthreads>>>(exp_coeff_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
-  exp_w_matmul_newnew<<<n_sites, warp_size>>>(exp_coeff_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
+  //exp_w_matmul<<<nblocks,nthreads,0,stream[0]>>>(exp_coeff_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
+  exp_w_matmul_newnew<<<n_sites, warp_size,0,stream[0]>>>(exp_coeff_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
   gpuErrchk(hipMemcpyAsync(exp_coeff_d, tmp_exp_coeff_d, n_exp_coeff*sizeof(double), hipMemcpyDeviceToDevice,stream[0] ));
   if(c_do_derivatives){
-    //exp_w_matmul<<<nblocks,nthreads>>>(exp_coeff_der_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
-    exp_w_matmul_newnew<<<n_sites, warp_size>>>(exp_coeff_der_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
+    //exp_w_matmul<<<nblocks,nthreads,0,stream[0]>>>(exp_coeff_der_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
+    exp_w_matmul_newnew<<<n_sites, warp_size,0,stream[0]>>>(exp_coeff_der_d, tmp_exp_coeff_d, W_d, k_i_d, n_neigh_d, alpha_max, n_sites);
     gpuErrchk(hipMemcpyAsync(exp_coeff_der_d, tmp_exp_coeff_d, n_exp_coeff_der*sizeof(double), hipMemcpyDeviceToDevice,stream[0] ));
   } 
 

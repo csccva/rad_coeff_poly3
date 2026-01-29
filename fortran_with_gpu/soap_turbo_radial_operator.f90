@@ -974,15 +974,23 @@ call  cpy_dtoh(exp_coeff_der_d,c_loc(exp_coeff_der),st_size_exp_coeff,gpu_stream
 call gpu_free_async(exp_coeff_d, gpu_stream)
 call gpu_free_async(exp_coeff_der_d, gpu_stream)
 
+call gpu_free_async(A_d, gpu_stream)
+call gpu_free_async(rjs_in_d, gpu_stream)
+call gpu_free_async(mask_d, gpu_stream)
+call gpu_free_async(n_neigh_d, gpu_stream)
+call gpu_free_async(k_i_d, gpu_stream)
+call gpu_free_async(W_d, gpu_stream)
+
 call gpu_device_synchronize()
 call cpu_time(f_time(2))
 write(*,*)
 write(*,*) "Time", f_time(2)-f_time(1)
 write(*,*)
  
-call gpu_stream_synchronize(gpu_stream) ! call gpu_device_synchronize()
+! call gpu_stream_synchronize(gpu_stream) ! call gpu_device_synchronize()
 call destroy_cublas_handle(cublas_handle, gpu_stream)
-call gpu_device_reset()
+call gpu_device_synchronize()
+!call gpu_device_reset()
 !   *********************************************
 
 !   This is for debugging

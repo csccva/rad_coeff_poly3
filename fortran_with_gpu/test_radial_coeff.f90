@@ -25,7 +25,7 @@ program test_radial
   character*16 :: scaling_mode = "polynomial"
 
   real*8 :: t1, t2
-  integer :: i, j, k
+  integer :: i, j, k, ccc
 
 !***************************************
 ! SOAP parameters
@@ -103,7 +103,8 @@ program test_radial
   exp_coeff_der_cp = exp_coeff_der
 
  
-! Using any other version of the radial coeff. subroutine
+ ccc=0
+ do 
  call cpu_time(t1)
  call get_radial_expansion_coefficients_poly3operator_gpu(n_sites, n_neigh, rjs_in, alpha_max, &
                                                       rcut_soft_in, rcut_hard_in, atom_sigma_in, &
@@ -132,7 +133,9 @@ program test_radial
                                                   maxval(abs(exp_coeff_der_cp-exp_coeff_der)/abs(exp_coeff_der) )
  write(*,*) "Min Difference between cpu and gpu", minval(abs(exp_coeff_der_cp-exp_coeff_der)), &
                                                   minval(abs(exp_coeff_der_cp-exp_coeff_der)/abs(exp_coeff_der) )
-
+ ccc=ccc+1
+ write(*,*) "Iteration " ,ccc
+ enddo 
 !  write(*,*) sqrt(sum(abs(exp_coeff_cp-exp_coeff)*abs(exp_coeff_cp-exp_coeff)/(alpha_max*n_sites*n_neigh(1))))
 ! write(*,*) maxval(n_neigh )
 ! k=0
